@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+android/
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Generated reports
+lighthouse-report.html
+
+# Signing keys (NEVER commit these)
+*.keystore
+*.jks
+*.p12
+signing-key.properties
+
+# OS files
+Thumbs.db

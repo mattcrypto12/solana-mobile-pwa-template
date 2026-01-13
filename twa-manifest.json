@@ -1,0 +1,69 @@
+{
+  "packageId": "com.example.solanamobilepwa",
+  "host": "your-domain.com",
+  "name": "Solana Mobile PWA",
+  "launcherName": "Solana PWA",
+  "display": "standalone",
+  "orientation": "portrait",
+  "themeColor": "#9945FF",
+  "navigationColor": "#0D0D0D",
+  "navigationColorDark": "#0D0D0D",
+  "navigationDividerColor": "#1A1A1A",
+  "navigationDividerColorDark": "#1A1A1A",
+  "backgroundColor": "#0D0D0D",
+  "enableNotifications": true,
+  "startUrl": "/",
+  "iconUrl": "https://your-domain.com/assets/icons/icon-512x512.png",
+  "maskableIconUrl": "https://your-domain.com/assets/icons/maskable-icon-512x512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./android.keystore",
+    "alias": "android"
+  },
+  "appVersionCode": 1,
+  "appVersionName": "1.0.0",
+  "shortcuts": [
+    {
+      "name": "Send SOL",
+      "shortName": "Send",
+      "url": "/?action=send",
+      "chosenIconUrl": "https://your-domain.com/assets/icons/shortcut-send.png"
+    },
+    {
+      "name": "Receive SOL",
+      "shortName": "Receive",
+      "url": "/?action=receive",
+      "chosenIconUrl": "https://your-domain.com/assets/icons/shortcut-receive.png"
+    }
+  ],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://your-domain.com/manifest.json",
+  "fallbackType": "customtabs",
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://your-domain.com/",
+  "minSdkVersion": 23,
+  "fingerprints": [],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [0],
+  "playBilling": {
+    "enabled": false
+  },
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "features": {
+    "locationDelegation": {
+      "enabled": false
+    },
+    "playBilling": {
+      "enabled": false
+    }
+  },
+  "shareTarget": {
+    "enabled": false
+  },
+  "useBrowserOnChromeOS": false,
+  "splashScreenImagePath": "./assets/splash/splash-512x512.png"
+}

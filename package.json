@@ -1,0 +1,45 @@
+{
+  "name": "solana-mobile-pwa",
+  "version": "1.0.0",
+  "description": "A mobile-optimized Progressive Web App template for the Solana dApp Store",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx http-server -p 8080 -c-1",
+    "dev": "npx http-server -p 8080 -c-1 -o",
+    "generate-assets": "chmod +x scripts/generate-assets.sh && ./scripts/generate-assets.sh",
+    "bubblewrap:init": "npx @anthropic/bubblewrap@latest init --manifest https://your-domain.com/manifest.json",
+    "bubblewrap:build": "cd android && npx @anthropic/bubblewrap@latest build",
+    "bubblewrap:update": "npx @anthropic/bubblewrap@latest update --manifest https://your-domain.com/manifest.json",
+    "lint": "npx eslint js/*.js",
+    "validate-pwa": "npx pwa-asset-generator assets/source/icon-1024x1024.png assets/icons --index index.html --manifest manifest.json",
+    "lighthouse": "npx lighthouse http://localhost:8080 --view --output=html --output-path=./lighthouse-report.html"
+  },
+  "keywords": [
+    "solana",
+    "pwa",
+    "progressive-web-app",
+    "bubblewrap",
+    "dapp-store",
+    "mobile",
+    "wallet",
+    "crypto"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@aspect-dev/aspect-cli": "^0.0.0",
+    "eslint": "^8.0.0",
+    "http-server": "^14.1.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/solana-mobile/pwa-template"
+  },
+  "bugs": {
+    "url": "https://github.com/solana-mobile/pwa-template/issues"
+  },
+  "homepage": "https://github.com/solana-mobile/pwa-template#readme"
+}
