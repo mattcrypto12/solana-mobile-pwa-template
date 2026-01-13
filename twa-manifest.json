@@ -1,6 +1,6 @@
 {
-  "packageId": "com.example.solanamobilepwa",
-  "host": "your-domain.com",
+  "packageId": "com.solanamobile.pwatemplate",
+  "host": "mattcrypto12.github.io",
   "name": "Solana Mobile PWA",
   "launcherName": "Solana PWA",
   "display": "standalone",
@@ -12,9 +12,9 @@
   "navigationDividerColorDark": "#1A1A1A",
   "backgroundColor": "#0D0D0D",
   "enableNotifications": true,
-  "startUrl": "/",
-  "iconUrl": "https://your-domain.com/assets/icons/icon-512x512.png",
-  "maskableIconUrl": "https://your-domain.com/assets/icons/maskable-icon-512x512.png",
+  "startUrl": "/solana-mobile-pwa-template/",
+  "iconUrl": "https://mattcrypto12.github.io/solana-mobile-pwa-template/assets/icons/icon-512x512.png",
+  "maskableIconUrl": "https://mattcrypto12.github.io/solana-mobile-pwa-template/assets/icons/maskable-icon-512x512.png",
   "splashScreenFadeOutDuration": 300,
   "signingKey": {
     "path": "./android.keystore",
@@ -22,27 +22,14 @@
   },
   "appVersionCode": 1,
   "appVersionName": "1.0.0",
-  "shortcuts": [
-    {
-      "name": "Send SOL",
-      "shortName": "Send",
-      "url": "/?action=send",
-      "chosenIconUrl": "https://your-domain.com/assets/icons/shortcut-send.png"
-    },
-    {
-      "name": "Receive SOL",
-      "shortName": "Receive",
-      "url": "/?action=receive",
-      "chosenIconUrl": "https://your-domain.com/assets/icons/shortcut-receive.png"
-    }
-  ],
+  "shortcuts": [],
   "generatorApp": "bubblewrap-cli",
-  "webManifestUrl": "https://your-domain.com/manifest.json",
+  "webManifestUrl": "https://mattcrypto12.github.io/solana-mobile-pwa-template/manifest.json",
   "fallbackType": "customtabs",
   "enableSiteSettingsShortcut": true,
   "isChromeOSOnly": false,
   "isMetaQuest": false,
-  "fullScopeUrl": "https://your-domain.com/",
+  "fullScopeUrl": "https://mattcrypto12.github.io/solana-mobile-pwa-template/",
   "minSdkVersion": 23,
   "fingerprints": [],
   "additionalTrustedOrigins": [],
@@ -65,5 +52,5 @@
     "enabled": false
   },
   "useBrowserOnChromeOS": false,
-  "splashScreenImagePath": "./assets/splash/splash-512x512.png"
+  "splashScreenImagePath": "https://mattcrypto12.github.io/solana-mobile-pwa-template/assets/splash/splash-512x512.png"
 }

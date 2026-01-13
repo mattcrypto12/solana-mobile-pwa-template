@@ -3,6 +3,7 @@ node_modules/
 
 # Build outputs
 android/
+android-app/
 dist/
 build/
 
