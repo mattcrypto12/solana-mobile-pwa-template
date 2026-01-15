@@ -3,7 +3,7 @@
  * Provides offline support and caching for the PWA
  */
 
-const CACHE_NAME = 'solana-pwa-v2';
+const CACHE_NAME = 'solana-pwa-v3';
 const OFFLINE_URL = '/offline.html';
 
 // Files to cache immediately on install

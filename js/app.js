@@ -323,7 +323,7 @@ class SolanaMobilePWA {
                     
                     <div class="wallet-options-list">
                         <button class="wallet-option-btn" data-wallet="phantom">
-                            <img src="/assets/wallets/phantom.svg" alt="Phantom" class="wallet-option-icon" />
+                            <img src="assets/wallets/phantom.svg" alt="Phantom" class="wallet-option-icon" onerror="this.style.display='none'" />
                             <div class="wallet-option-info">
                                 <span class="wallet-option-name">Phantom</span>
                                 <span class="wallet-option-desc">Popular Solana wallet</span>
@@ -334,7 +334,7 @@ class SolanaMobilePWA {
                         </button>
                         
                         <button class="wallet-option-btn" data-wallet="solflare">
-                            <img src="/assets/wallets/solflare.svg" alt="Solflare" class="wallet-option-icon" />
+                            <img src="assets/wallets/solflare.svg" alt="Solflare" class="wallet-option-icon" onerror="this.style.display='none'" />
                             <div class="wallet-option-info">
                                 <span class="wallet-option-name">Solflare</span>
                                 <span class="wallet-option-desc">Full-featured wallet</span>
@@ -345,10 +345,32 @@ class SolanaMobilePWA {
                         </button>
                         
                         <button class="wallet-option-btn" data-wallet="backpack">
-                            <img src="/assets/wallets/backpack.svg" alt="Backpack" class="wallet-option-icon" />
+                            <img src="assets/wallets/backpack.svg" alt="Backpack" class="wallet-option-icon" onerror="this.style.display='none'" />
                             <div class="wallet-option-info">
                                 <span class="wallet-option-name">Backpack</span>
                                 <span class="wallet-option-desc">xNFT wallet</span>
+                            </div>
+                            <svg class="wallet-option-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M9 18l6-6-6-6"/>
+                            </svg>
+                        </button>
+                        
+                        <button class="wallet-option-btn mwa-option" data-wallet="mwa">
+                            <div class="wallet-option-icon mwa-icon">
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <circle cx="12" cy="12" r="10" stroke="url(#mwaGrad)" stroke-width="2"/>
+                                    <path d="M8 12h8M12 8v8" stroke="url(#mwaGrad)" stroke-width="2" stroke-linecap="round"/>
+                                    <defs>
+                                        <linearGradient id="mwaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                            <stop offset="0%" style="stop-color:#9945FF"/>
+                                            <stop offset="100%" style="stop-color:#14F195"/>
+                                        </linearGradient>
+                                    </defs>
+                                </svg>
+                            </div>
+                            <div class="wallet-option-info">
+                                <span class="wallet-option-name">Mobile Wallet</span>
+                                <span class="wallet-option-desc">For Seeker & Android wallets</span>
                             </div>
                             <svg class="wallet-option-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M9 18l6-6-6-6"/>
@@ -464,6 +486,16 @@ class SolanaMobilePWA {
                 border-radius: 12px;
                 object-fit: cover;
             }
+            .wallet-option-icon.mwa-icon {
+                background: linear-gradient(135deg, rgba(153, 69, 255, 0.2), rgba(20, 241, 149, 0.2));
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .wallet-option-icon.mwa-icon svg {
+                width: 32px;
+                height: 32px;
+            }
             .wallet-option-info {
                 flex: 1;
                 display: flex;
@@ -556,6 +588,12 @@ class SolanaMobilePWA {
     }
     
     handleWalletDeepLink(walletName) {
+        // Handle Mobile Wallet Adapter for Seeker phones
+        if (walletName === 'mwa') {
+            this.connectWithMWA();
+            return;
+        }
+        
         // Deep link configurations for mobile wallets
         const currentUrl = encodeURIComponent(window.location.href);
         const deepLinks = {
@@ -569,6 +607,46 @@ class SolanaMobilePWA {
             this.showToast(`Opening ${walletName}...`, 'info');
             // In production, this would redirect to the wallet app
             window.location.href = link;
+        }
+    }
+    
+    async connectWithMWA() {
+        // Connect using Mobile Wallet Adapter (for Seeker phones and Android wallets)
+        this.showToast('Looking for mobile wallets...', 'info');
+        
+        try {
+            // Check if MobileWalletAdapter class is available (from mwa.js)
+            if (typeof MobileWalletAdapter !== 'undefined') {
+                const mwa = new MobileWalletAdapter({ cluster: 'devnet' });
+                const result = await mwa.connect();
+                
+                if (result && result.publicKey) {
+                    this.walletAddress = result.publicKey;
+                    this.isWalletConnected = true;
+                    this.updateWalletUI();
+                    this.fetchBalance();
+                    this.showToast('✓ Wallet connected via MWA!', 'success');
+                    return;
+                }
+            }
+            
+            // Fallback: Try to use injected provider directly
+            const provider = window.phantom?.solana || window.solflare || window.solana;
+            if (provider) {
+                const resp = await provider.connect();
+                this.walletAddress = resp.publicKey.toString();
+                this.isWalletConnected = true;
+                this.updateWalletUI();
+                this.fetchBalance();
+                this.showToast('✓ Wallet connected!', 'success');
+                return;
+            }
+            
+            // No wallet found - show helpful message
+            this.showToast('No mobile wallet detected. Install Phantom or Solflare.', 'warning');
+        } catch (error) {
+            console.error('MWA connection error:', error);
+            this.showToast('Connection failed. Try a specific wallet.', 'error');
         }
     }
     
