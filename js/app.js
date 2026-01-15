@@ -612,12 +612,24 @@ class SolanaMobilePWA {
     
     async connectWithMWA() {
         // Connect using Mobile Wallet Adapter (for Seeker phones and Android wallets)
-        this.showToast('Looking for mobile wallets...', 'info');
+        const isSeeker = /seeker|saga|solanamobile/i.test(navigator.userAgent);
+        
+        if (isSeeker) {
+            this.showToast('Connecting to Seeker wallet...', 'info');
+        } else {
+            this.showToast('Looking for mobile wallets...', 'info');
+        }
         
         try {
             // Check if MobileWalletAdapter class is available (from mwa.js)
             if (typeof MobileWalletAdapter !== 'undefined') {
                 const mwa = new MobileWalletAdapter({ cluster: 'devnet' });
+                
+                // Show connecting state
+                if (isSeeker) {
+                    this.showToast('Opening wallet selector...', 'info');
+                }
+                
                 const result = await mwa.connect();
                 
                 if (result && result.publicKey) {
@@ -642,11 +654,25 @@ class SolanaMobilePWA {
                 return;
             }
             
+            // On Seeker, try deep linking to Phantom which is pre-installed
+            if (isSeeker) {
+                this.showToast('Opening Phantom...', 'info');
+                const currentUrl = encodeURIComponent(window.location.href);
+                window.location.href = `phantom://browse/${currentUrl}`;
+                return;
+            }
+            
             // No wallet found - show helpful message
-            this.showToast('No mobile wallet detected. Install Phantom or Solflare.', 'warning');
+            this.showToast('No mobile wallet detected. Try selecting a specific wallet.', 'warning');
         } catch (error) {
             console.error('MWA connection error:', error);
-            this.showToast('Connection failed. Try a specific wallet.', 'error');
+            
+            // On Seeker, provide a more helpful fallback
+            if (isSeeker) {
+                this.showToast('Try selecting Phantom or Solflare directly.', 'warning');
+            } else {
+                this.showToast('Connection failed. Try a specific wallet.', 'error');
+            }
         }
     }
     

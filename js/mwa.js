@@ -2,7 +2,7 @@
  * Solana Mobile Wallet Adapter Integration
  * 
  * This module provides integration with Solana's Mobile Wallet Adapter (MWA) standard,
- * enabling seamless wallet connections on Android devices.
+ * enabling seamless wallet connections on Android devices including Seeker phones.
  * 
  * @see https://github.com/solana-mobile/mobile-wallet-adapter
  */
@@ -22,6 +22,14 @@ const CLUSTERS = {
     'testnet': 'https://api.testnet.solana.com'
 };
 
+// Seeker/SMS detection
+const isSolanaDevice = () => {
+    const ua = navigator.userAgent.toLowerCase();
+    return ua.includes('seeker') || ua.includes('saga') || ua.includes('solanamobile');
+};
+
+const isAndroid = () => /Android/i.test(navigator.userAgent);
+
 /**
  * Mobile Wallet Adapter class
  * Provides a unified interface for connecting to Solana wallets on mobile
@@ -38,6 +46,10 @@ class MobileWalletAdapter {
         // Event listeners
         this._listeners = new Map();
         
+        // Check device type
+        this.isSeeker = isSolanaDevice();
+        this.isAndroid = isAndroid();
+        
         // Check if MWA is available
         this.mwaAvailable = this._checkMWAAvailability();
     }
@@ -46,14 +58,21 @@ class MobileWalletAdapter {
      * Check if Mobile Wallet Adapter is available
      */
     _checkMWAAvailability() {
-        // MWA is available on Android devices with compatible wallets
-        const isAndroid = /Android/i.test(navigator.userAgent);
+        // Seeker and Saga phones always have MWA
+        if (this.isSeeker) {
+            return true;
+        }
         
-        // Check for wallet-standard compatible wallets
+        // Check for Android (MWA works on any Android with compatible wallet)
+        if (this.isAndroid) {
+            return true;
+        }
+        
+        // Check for wallet-standard compatible wallets (browser extensions)
         const hasWalletStandard = typeof window !== 'undefined' && 
             (window.phantom?.solana || window.solflare || window.backpack?.solana || window.solana);
         
-        return isAndroid || hasWalletStandard;
+        return hasWalletStandard;
     }
     
     /**
@@ -61,7 +80,16 @@ class MobileWalletAdapter {
      */
     async connect() {
         try {
-            // Try injected provider first (in-app browser)
+            // On Seeker/Saga, use the native MWA protocol
+            if (this.isSeeker || this.isAndroid) {
+                // Try native MWA first
+                const nativeResult = await this._connectNativeMWA();
+                if (nativeResult) {
+                    return nativeResult;
+                }
+            }
+            
+            // Try injected provider (in-app browser)
             const provider = this._getInjectedProvider();
             
             if (provider) {
@@ -82,13 +110,153 @@ class MobileWalletAdapter {
                 return await this._connectInjected(window.backpack.solana);
             }
             
-            // No provider found - show wallet selection
-            throw new Error('NO_WALLET_FOUND');
+            // No provider found - try deep link to wallet
+            return await this._connectViaDeepLink();
             
         } catch (error) {
             console.error('MWA Connect Error:', error);
             throw error;
         }
+    }
+    
+    /**
+     * Connect using native MWA protocol (for Seeker/Saga and Android)
+     * Uses the solana-wallet:// protocol
+     */
+    async _connectNativeMWA() {
+        return new Promise((resolve, reject) => {
+            // Create MWA association URL
+            const associationKeypair = this._generateAssociationKeypair();
+            const sessionId = this._generateSessionId();
+            
+            // Store session for callback
+            window._mwaSession = {
+                sessionId,
+                resolve,
+                reject,
+                timestamp: Date.now()
+            };
+            
+            // Listen for response via message event (for in-app scenarios)
+            const messageHandler = (event) => {
+                if (event.data?.type === 'mwa-response' && event.data?.sessionId === sessionId) {
+                    window.removeEventListener('message', messageHandler);
+                    if (event.data.publicKey) {
+                        this.publicKey = event.data.publicKey;
+                        this.connected = true;
+                        resolve({ publicKey: this.publicKey, connected: true });
+                    } else {
+                        reject(new Error(event.data.error || 'Connection failed'));
+                    }
+                }
+            };
+            window.addEventListener('message', messageHandler);
+            
+            // Build the MWA connect URL
+            const mwaUrl = this._buildMWAConnectUrl(sessionId);
+            
+            // Try to invoke MWA
+            const iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.src = mwaUrl;
+            document.body.appendChild(iframe);
+            
+            // Also try opening directly (some devices need this)
+            setTimeout(() => {
+                // If iframe didn't work, try window.location
+                if (!this.connected) {
+                    window.location.href = mwaUrl;
+                }
+            }, 100);
+            
+            // Timeout after 30 seconds
+            setTimeout(() => {
+                window.removeEventListener('message', messageHandler);
+                iframe.remove();
+                if (!this.connected) {
+                    // Don't reject, let it fall through to other methods
+                    resolve(null);
+                }
+            }, 30000);
+        });
+    }
+    
+    /**
+     * Build MWA connect URL for native protocol
+     */
+    _buildMWAConnectUrl(sessionId) {
+        const params = new URLSearchParams({
+            app_identity_name: this.appIdentity.name,
+            app_identity_uri: this.appIdentity.uri,
+            app_identity_icon: this.appIdentity.icon,
+            cluster: this.cluster,
+            session_id: sessionId,
+            callback_url: window.location.href
+        });
+        
+        return `solana-wallet://authorize?${params.toString()}`;
+    }
+    
+    /**
+     * Connect via deep link (fallback)
+     */
+    async _connectViaDeepLink() {
+        return new Promise((resolve, reject) => {
+            // Try Phantom deep link first as it's most common on Seeker
+            const currentUrl = encodeURIComponent(window.location.href);
+            const phantomUrl = `phantom://browse/${currentUrl}`;
+            
+            // Create a hidden link and click it
+            const link = document.createElement('a');
+            link.href = phantomUrl;
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            
+            // Set up visibility change listener to detect return from wallet
+            const visibilityHandler = () => {
+                if (document.visibilityState === 'visible') {
+                    document.removeEventListener('visibilitychange', visibilityHandler);
+                    // Check if we got connected via injected provider
+                    setTimeout(() => {
+                        const provider = this._getInjectedProvider();
+                        if (provider) {
+                            this._connectInjected(provider).then(resolve).catch(reject);
+                        } else {
+                            reject(new Error('NO_WALLET_FOUND'));
+                        }
+                    }, 500);
+                }
+            };
+            document.addEventListener('visibilitychange', visibilityHandler);
+            
+            // Click the link
+            link.click();
+            link.remove();
+            
+            // Timeout
+            setTimeout(() => {
+                document.removeEventListener('visibilitychange', visibilityHandler);
+                reject(new Error('NO_WALLET_FOUND'));
+            }, 60000);
+        });
+    }
+    
+    /**
+     * Generate a simple session ID
+     */
+    _generateSessionId() {
+        return 'mwa_' + Math.random().toString(36).substring(2, 15);
+    }
+    
+    /**
+     * Generate association keypair (simplified)
+     */
+    _generateAssociationKeypair() {
+        // In production, this would be a proper ed25519 keypair
+        return {
+            publicKey: this._generateSessionId(),
+            secretKey: this._generateSessionId()
+        };
     }
     
     /**
