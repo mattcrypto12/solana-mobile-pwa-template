@@ -628,7 +628,7 @@ class SolanaMobilePWA {
     
     async connectWithMWA() {
         // Connect using Mobile Wallet Adapter (for Seeker phones and Android wallets)
-        const onSeeker = typeof isSeeker === 'function' ? isSeeker() : /seeker|saga|solanamobile/i.test(navigator.userAgent);
+        // This uses the proper MWA protocol per Solana Mobile guidelines
         
         // First check if we're already in a wallet's in-app browser
         if (typeof getInjectedProvider === 'function') {
@@ -653,20 +653,52 @@ class SolanaMobilePWA {
             }
         }
         
-        // Not in a wallet browser - use MWA intent to show wallet chooser
+        // Use the full MWA transact function which:
+        // 1. Generates association keypair
+        // 2. Builds intent URL with proper parameters
+        // 3. Launches wallet chooser (shows Seed Vault, Phantom, Solflare, etc.)
+        // 4. Establishes encrypted WebSocket session
         this.showToast('Opening wallet selector...', 'info');
         
         try {
-            // Use the solana-wallet:// protocol to trigger Android's wallet chooser
-            // This will show all installed wallets that support MWA
-            const mwaUrl = 'solana-wallet://v1/associate/local';
-            
-            console.log('MWA: Opening wallet chooser via:', mwaUrl);
-            window.location.href = mwaUrl;
+            if (typeof transact === 'function') {
+                console.log('[App] Using MWA transact function');
+                
+                const result = await transact(async (wallet) => {
+                    // Request authorization
+                    const auth = await wallet.authorize({
+                        identity: {
+                            name: 'Solana Mobile PWA',
+                            uri: window.location.origin,
+                            icon: `${window.location.origin}/assets/icons/icon-192x192.png`
+                        },
+                        cluster: 'devnet'
+                    });
+                    
+                    return auth;
+                });
+                
+                if (result && result.accounts && result.accounts.length > 0) {
+                    this.walletAddress = result.accounts[0].address;
+                    this.isWalletConnected = true;
+                    this.updateWalletUI();
+                    this.fetchBalance();
+                    this.showToast('✓ Wallet connected via MWA!', 'success');
+                }
+            } else {
+                console.error('[App] transact function not available');
+                this.showToast('MWA not available. Try a specific wallet.', 'error');
+            }
             
         } catch (error) {
             console.error('MWA connection error:', error);
-            this.showToast('Could not open wallet. Try selecting a specific wallet.', 'error');
+            if (error.message?.includes('WALLET_NOT_FOUND')) {
+                this.showToast('No MWA-compatible wallet found.', 'error');
+            } else if (error.message?.includes('SESSION_TIMEOUT')) {
+                this.showToast('Wallet connection timed out.', 'warning');
+            } else {
+                this.showToast('Could not connect. Try a specific wallet.', 'error');
+            }
         }
     }
     
