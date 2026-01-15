@@ -3,7 +3,7 @@
  * Provides offline support and caching for the PWA
  */
 
-const CACHE_NAME = 'solana-pwa-v1';
+const CACHE_NAME = 'solana-pwa-v2';
 const OFFLINE_URL = '/offline.html';
 
 // Files to cache immediately on install
@@ -13,9 +13,14 @@ const PRECACHE_ASSETS = [
     '/manifest.json',
     '/css/styles.css',
     '/js/app.js',
+    '/js/mwa.js',
+    '/js/wallet.js',
     '/offline.html',
     '/assets/icons/icon-192x192.png',
-    '/assets/icons/icon-512x512.png'
+    '/assets/icons/icon-512x512.png',
+    '/assets/wallets/phantom.svg',
+    '/assets/wallets/solflare.svg',
+    '/assets/wallets/backpack.svg'
 ];
 
 // API endpoints that should never be cached
