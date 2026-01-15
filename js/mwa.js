@@ -1,325 +1,194 @@
 /**
  * Solana Mobile Wallet Adapter Integration
  * 
- * This module provides integration with Solana's Mobile Wallet Adapter (MWA) standard,
- * enabling seamless wallet connections on Android devices including Seeker phones.
+ * This module provides MWA integration for PWAs.
+ * Uses deep links to wallet apps which provide in-app browser with injected providers.
  * 
  * @see https://github.com/solana-mobile/mobile-wallet-adapter
  */
 
-// MWA Constants
-const MWA_PROTOCOL_VERSION = '1.0.0';
-const MWA_APP_IDENTITY = {
-    name: 'Solana Mobile PWA',
-    uri: window.location.origin,
-    icon: `${window.location.origin}/assets/icons/icon-192x192.png`
-};
+// ==========================================================================
+// Detection Functions
+// ==========================================================================
 
-// Cluster configuration
-const CLUSTERS = {
-    'mainnet-beta': 'https://api.mainnet-beta.solana.com',
-    'devnet': 'https://api.devnet.solana.com',
-    'testnet': 'https://api.testnet.solana.com'
-};
+function isAndroid() {
+    return /Android/i.test(navigator.userAgent);
+}
 
-// Seeker/SMS detection
-const isSolanaDevice = () => {
+function isSeeker() {
     const ua = navigator.userAgent.toLowerCase();
     return ua.includes('seeker') || ua.includes('saga') || ua.includes('solanamobile');
+}
+
+function isMobileDevice() {
+    return /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+}
+
+// ==========================================================================
+// Provider Detection
+// ==========================================================================
+
+function getInjectedProvider() {
+    // Phantom
+    if (window.phantom?.solana?.isPhantom) {
+        console.log('MWA: Found Phantom provider');
+        return { name: 'Phantom', provider: window.phantom.solana };
+    }
+    if (window.solana?.isPhantom) {
+        console.log('MWA: Found Phantom via window.solana');
+        return { name: 'Phantom', provider: window.solana };
+    }
+    
+    // Solflare
+    if (window.solflare?.isSolflare) {
+        console.log('MWA: Found Solflare provider');
+        return { name: 'Solflare', provider: window.solflare };
+    }
+    
+    // Backpack
+    if (window.backpack?.isBackpack) {
+        console.log('MWA: Found Backpack provider');
+        return { name: 'Backpack', provider: window.backpack };
+    }
+    
+    // Generic Solana provider
+    if (window.solana) {
+        console.log('MWA: Found generic Solana provider');
+        return { name: 'Wallet', provider: window.solana };
+    }
+    
+    return null;
+}
+
+// ==========================================================================
+// Wallet Deep Links
+// ==========================================================================
+
+const WALLET_DEEP_LINKS = {
+    phantom: {
+        name: 'Phantom',
+        browse: (url) => `https://phantom.app/ul/browse/${encodeURIComponent(url)}`,
+        connect: () => 'https://phantom.app/ul/v1/connect',
+        installed: () => !!window.phantom?.solana
+    },
+    solflare: {
+        name: 'Solflare', 
+        browse: (url) => `https://solflare.com/ul/v1/browse/${encodeURIComponent(url)}`,
+        connect: () => 'https://solflare.com/ul/v1/connect',
+        installed: () => !!window.solflare
+    },
+    backpack: {
+        name: 'Backpack',
+        browse: (url) => `https://backpack.app/ul/v1/browse/${encodeURIComponent(url)}`,
+        connect: () => 'https://backpack.app/ul/v1/connect',
+        installed: () => !!window.backpack
+    }
 };
 
-const isAndroid = () => /Android/i.test(navigator.userAgent);
+// ==========================================================================
+// MobileWalletAdapter Class
+// ==========================================================================
 
-/**
- * Mobile Wallet Adapter class
- * Provides a unified interface for connecting to Solana wallets on mobile
- */
 class MobileWalletAdapter {
     constructor(options = {}) {
         this.cluster = options.cluster || 'devnet';
-        this.appIdentity = options.appIdentity || MWA_APP_IDENTITY;
+        this.appIdentity = options.appIdentity || {
+            name: 'Solana Mobile PWA',
+            uri: window.location.origin,
+            icon: `${window.location.origin}/assets/icons/icon-192x192.png`
+        };
         
         this.publicKey = null;
-        this.authToken = null;
         this.connected = false;
-        
-        // Event listeners
-        this._listeners = new Map();
-        
-        // Check device type
-        this.isSeeker = isSolanaDevice();
-        this.isAndroid = isAndroid();
-        
-        // Check if MWA is available
-        this.mwaAvailable = this._checkMWAAvailability();
+        this.providerName = null;
+        this._provider = null;
     }
     
     /**
-     * Check if Mobile Wallet Adapter is available
+     * Check if MWA/wallet connection is available
      */
-    _checkMWAAvailability() {
-        // Seeker and Saga phones always have MWA
-        if (this.isSeeker) {
-            return true;
-        }
-        
-        // Check for Android (MWA works on any Android with compatible wallet)
-        if (this.isAndroid) {
-            return true;
-        }
-        
-        // Check for wallet-standard compatible wallets (browser extensions)
-        const hasWalletStandard = typeof window !== 'undefined' && 
-            (window.phantom?.solana || window.solflare || window.backpack?.solana || window.solana);
-        
-        return hasWalletStandard;
+    isAvailable() {
+        // Available if we have an injected provider or we're on Android
+        return !!getInjectedProvider() || isAndroid();
     }
     
     /**
-     * Connect to a mobile wallet using MWA
+     * Check if running on Seeker phone
      */
-    async connect() {
+    isSeeker() {
+        return isSeeker();
+    }
+    
+    /**
+     * Connect to a wallet
+     * @param {string} preferredWallet - Optional: 'phantom', 'solflare', 'backpack'
+     */
+    async connect(preferredWallet = null) {
+        console.log('MWA: Starting connection...', { preferredWallet, isAndroid: isAndroid(), isSeeker: isSeeker() });
+        
+        // First, check for injected provider (we're in a wallet's in-app browser)
+        const injected = getInjectedProvider();
+        if (injected) {
+            console.log('MWA: Using injected provider:', injected.name);
+            return await this._connectWithProvider(injected.provider, injected.name);
+        }
+        
+        // No injected provider - we need to open a wallet app
+        if (preferredWallet && WALLET_DEEP_LINKS[preferredWallet]) {
+            console.log('MWA: Opening specific wallet:', preferredWallet);
+            return this._openWalletApp(preferredWallet);
+        }
+        
+        // On Seeker, default to Phantom (pre-installed)
+        if (isSeeker()) {
+            console.log('MWA: Seeker detected, opening Phantom');
+            return this._openWalletApp('phantom');
+        }
+        
+        // On other Android, try Phantom first
+        if (isAndroid()) {
+            console.log('MWA: Android detected, trying Phantom');
+            return this._openWalletApp('phantom');
+        }
+        
+        throw new Error('NO_WALLET_AVAILABLE');
+    }
+    
+    /**
+     * Connect with an injected provider
+     */
+    async _connectWithProvider(provider, name) {
         try {
-            // On Seeker/Saga, use the native MWA protocol
-            if (this.isSeeker || this.isAndroid) {
-                // Try native MWA first
-                const nativeResult = await this._connectNativeMWA();
-                if (nativeResult) {
-                    return nativeResult;
-                }
-            }
+            console.log('MWA: Connecting with provider:', name);
             
-            // Try injected provider (in-app browser)
-            const provider = this._getInjectedProvider();
-            
-            if (provider) {
-                return await this._connectInjected(provider);
-            }
-            
-            // Check for wallet-standard wallets
-            if (window.solana?.isPhantom || window.phantom?.solana) {
-                const phantomProvider = window.phantom?.solana || window.solana;
-                return await this._connectInjected(phantomProvider);
-            }
-            
-            if (window.solflare?.isSolflare) {
-                return await this._connectInjected(window.solflare);
-            }
-            
-            if (window.backpack?.isBackpack) {
-                return await this._connectInjected(window.backpack.solana);
-            }
-            
-            // No provider found - try deep link to wallet
-            return await this._connectViaDeepLink();
-            
-        } catch (error) {
-            console.error('MWA Connect Error:', error);
-            throw error;
-        }
-    }
-    
-    /**
-     * Connect using native MWA protocol (for Seeker/Saga and Android)
-     * Uses the solana-wallet:// protocol
-     */
-    async _connectNativeMWA() {
-        return new Promise((resolve, reject) => {
-            // Create MWA association URL
-            const associationKeypair = this._generateAssociationKeypair();
-            const sessionId = this._generateSessionId();
-            
-            // Store session for callback
-            window._mwaSession = {
-                sessionId,
-                resolve,
-                reject,
-                timestamp: Date.now()
-            };
-            
-            // Listen for response via message event (for in-app scenarios)
-            const messageHandler = (event) => {
-                if (event.data?.type === 'mwa-response' && event.data?.sessionId === sessionId) {
-                    window.removeEventListener('message', messageHandler);
-                    if (event.data.publicKey) {
-                        this.publicKey = event.data.publicKey;
-                        this.connected = true;
-                        resolve({ publicKey: this.publicKey, connected: true });
-                    } else {
-                        reject(new Error(event.data.error || 'Connection failed'));
-                    }
-                }
-            };
-            window.addEventListener('message', messageHandler);
-            
-            // Build the MWA connect URL
-            const mwaUrl = this._buildMWAConnectUrl(sessionId);
-            
-            // Try to invoke MWA
-            const iframe = document.createElement('iframe');
-            iframe.style.display = 'none';
-            iframe.src = mwaUrl;
-            document.body.appendChild(iframe);
-            
-            // Also try opening directly (some devices need this)
-            setTimeout(() => {
-                // If iframe didn't work, try window.location
-                if (!this.connected) {
-                    window.location.href = mwaUrl;
-                }
-            }, 100);
-            
-            // Timeout after 30 seconds
-            setTimeout(() => {
-                window.removeEventListener('message', messageHandler);
-                iframe.remove();
-                if (!this.connected) {
-                    // Don't reject, let it fall through to other methods
-                    resolve(null);
-                }
-            }, 30000);
-        });
-    }
-    
-    /**
-     * Build MWA connect URL for native protocol
-     */
-    _buildMWAConnectUrl(sessionId) {
-        const params = new URLSearchParams({
-            app_identity_name: this.appIdentity.name,
-            app_identity_uri: this.appIdentity.uri,
-            app_identity_icon: this.appIdentity.icon,
-            cluster: this.cluster,
-            session_id: sessionId,
-            callback_url: window.location.href
-        });
-        
-        return `solana-wallet://authorize?${params.toString()}`;
-    }
-    
-    /**
-     * Connect via deep link (fallback)
-     */
-    async _connectViaDeepLink() {
-        return new Promise((resolve, reject) => {
-            // Try Phantom deep link first as it's most common on Seeker
-            const currentUrl = encodeURIComponent(window.location.href);
-            const phantomUrl = `phantom://browse/${currentUrl}`;
-            
-            // Create a hidden link and click it
-            const link = document.createElement('a');
-            link.href = phantomUrl;
-            link.style.display = 'none';
-            document.body.appendChild(link);
-            
-            // Set up visibility change listener to detect return from wallet
-            const visibilityHandler = () => {
-                if (document.visibilityState === 'visible') {
-                    document.removeEventListener('visibilitychange', visibilityHandler);
-                    // Check if we got connected via injected provider
-                    setTimeout(() => {
-                        const provider = this._getInjectedProvider();
-                        if (provider) {
-                            this._connectInjected(provider).then(resolve).catch(reject);
-                        } else {
-                            reject(new Error('NO_WALLET_FOUND'));
-                        }
-                    }, 500);
-                }
-            };
-            document.addEventListener('visibilitychange', visibilityHandler);
-            
-            // Click the link
-            link.click();
-            link.remove();
-            
-            // Timeout
-            setTimeout(() => {
-                document.removeEventListener('visibilitychange', visibilityHandler);
-                reject(new Error('NO_WALLET_FOUND'));
-            }, 60000);
-        });
-    }
-    
-    /**
-     * Generate a simple session ID
-     */
-    _generateSessionId() {
-        return 'mwa_' + Math.random().toString(36).substring(2, 15);
-    }
-    
-    /**
-     * Generate association keypair (simplified)
-     */
-    _generateAssociationKeypair() {
-        // In production, this would be a proper ed25519 keypair
-        return {
-            publicKey: this._generateSessionId(),
-            secretKey: this._generateSessionId()
-        };
-    }
-    
-    /**
-     * Get injected wallet provider
-     */
-    _getInjectedProvider() {
-        // Check user agent for in-app browser
-        const ua = navigator.userAgent.toLowerCase();
-        
-        if (ua.includes('phantom') && window.phantom?.solana) {
-            return window.phantom.solana;
-        }
-        
-        if (ua.includes('solflare') && window.solflare) {
-            return window.solflare;
-        }
-        
-        if (ua.includes('backpack') && window.backpack?.solana) {
-            return window.backpack.solana;
-        }
-        
-        // Check for generic Solana provider
-        if (window.solana?.isPhantom) {
-            return window.solana;
-        }
-        
-        return null;
-    }
-    
-    /**
-     * Connect using injected provider
-     */
-    async _connectInjected(provider) {
-        try {
+            // Connect to the wallet
             const response = await provider.connect();
             
             this.publicKey = response.publicKey.toString();
             this.connected = true;
-            this.provider = provider;
+            this.providerName = name;
+            this._provider = provider;
             
-            // Setup disconnect listener
-            provider.on?.('disconnect', () => {
-                this._handleDisconnect();
-            });
+            console.log('MWA: Connected!', this.publicKey);
             
-            // Setup account change listener
-            provider.on?.('accountChanged', (publicKey) => {
-                if (publicKey) {
-                    this.publicKey = publicKey.toString();
-                    this._emit('accountChanged', { publicKey: this.publicKey });
-                } else {
-                    this._handleDisconnect();
-                }
-            });
-            
-            this._emit('connect', { publicKey: this.publicKey });
+            // Set up disconnect listener
+            if (provider.on) {
+                provider.on('disconnect', () => {
+                    console.log('MWA: Wallet disconnected');
+                    this.publicKey = null;
+                    this.connected = false;
+                });
+            }
             
             return {
                 publicKey: this.publicKey,
-                connected: true
+                connected: true,
+                providerName: name
             };
             
         } catch (error) {
+            console.error('MWA: Provider connect error:', error);
+            
             if (error.code === 4001) {
                 throw new Error('USER_REJECTED');
             }
@@ -328,46 +197,61 @@ class MobileWalletAdapter {
     }
     
     /**
-     * Disconnect from wallet
+     * Open a wallet app's in-app browser
      */
-    async disconnect() {
-        try {
-            if (this.provider?.disconnect) {
-                await this.provider.disconnect();
-            }
-        } catch (error) {
-            console.error('Disconnect error:', error);
-        } finally {
-            this._handleDisconnect();
+    _openWalletApp(walletKey) {
+        const wallet = WALLET_DEEP_LINKS[walletKey];
+        if (!wallet) {
+            throw new Error('UNKNOWN_WALLET');
         }
+        
+        const currentUrl = window.location.href;
+        const browseUrl = wallet.browse(currentUrl);
+        
+        console.log('MWA: Opening wallet browser:', browseUrl);
+        
+        // Navigate to the wallet's in-app browser
+        window.location.href = browseUrl;
+        
+        // This will navigate away, so we return a pending promise
+        return new Promise((resolve) => {
+            // This promise won't resolve - the page will navigate
+            // When the user returns (in the wallet's browser), 
+            // the injected provider will be available
+        });
     }
     
     /**
-     * Handle disconnect
+     * Disconnect from wallet
      */
-    _handleDisconnect() {
-        this.publicKey = null;
-        this.authToken = null;
-        this.connected = false;
-        this.provider = null;
+    async disconnect() {
+        if (this._provider?.disconnect) {
+            try {
+                await this._provider.disconnect();
+            } catch (e) {
+                console.log('MWA: Disconnect error (ignored):', e);
+            }
+        }
         
-        this._emit('disconnect', {});
+        this.publicKey = null;
+        this.connected = false;
+        this.providerName = null;
+        this._provider = null;
     }
     
     /**
      * Sign a message
      */
     async signMessage(message) {
-        if (!this.connected || !this.provider) {
+        if (!this.connected || !this._provider) {
             throw new Error('WALLET_NOT_CONNECTED');
         }
         
-        const encodedMessage = typeof message === 'string' 
+        const encodedMessage = typeof message === 'string'
             ? new TextEncoder().encode(message)
             : message;
         
-        const signature = await this.provider.signMessage(encodedMessage, 'utf8');
-        
+        const { signature } = await this._provider.signMessage(encodedMessage, 'utf8');
         return signature;
     }
     
@@ -375,473 +259,89 @@ class MobileWalletAdapter {
      * Sign a transaction
      */
     async signTransaction(transaction) {
-        if (!this.connected || !this.provider) {
+        if (!this.connected || !this._provider) {
             throw new Error('WALLET_NOT_CONNECTED');
         }
         
-        const signedTransaction = await this.provider.signTransaction(transaction);
-        
-        return signedTransaction;
+        return await this._provider.signTransaction(transaction);
     }
     
     /**
      * Sign and send a transaction
      */
     async signAndSendTransaction(transaction, options = {}) {
-        if (!this.connected || !this.provider) {
+        if (!this.connected || !this._provider) {
             throw new Error('WALLET_NOT_CONNECTED');
         }
         
-        const signature = await this.provider.signAndSendTransaction(transaction, options);
-        
-        return signature;
+        return await this._provider.signAndSendTransaction(transaction, options);
+    }
+}
+
+// ==========================================================================
+// Helper Functions
+// ==========================================================================
+
+/**
+ * Open a specific wallet's in-app browser
+ */
+function openWalletBrowser(walletName, url = window.location.href) {
+    const wallet = WALLET_DEEP_LINKS[walletName.toLowerCase()];
+    if (!wallet) {
+        console.error('Unknown wallet:', walletName);
+        return false;
     }
     
-    /**
-     * Sign multiple transactions
-     */
-    async signAllTransactions(transactions) {
-        if (!this.connected || !this.provider) {
-            throw new Error('WALLET_NOT_CONNECTED');
-        }
-        
-        if (this.provider.signAllTransactions) {
-            return await this.provider.signAllTransactions(transactions);
-        }
-        
-        // Fallback: sign one by one
-        return await Promise.all(transactions.map(tx => this.signTransaction(tx)));
-    }
-    
-    /**
-     * Get wallet balance
-     */
-    async getBalance() {
-        if (!this.publicKey) {
-            throw new Error('WALLET_NOT_CONNECTED');
-        }
-        
-        const rpcUrl = CLUSTERS[this.cluster];
-        
-        const response = await fetch(rpcUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                jsonrpc: '2.0',
-                id: 1,
-                method: 'getBalance',
-                params: [this.publicKey]
-            })
-        });
-        
-        const data = await response.json();
-        
-        if (data.error) {
-            throw new Error(data.error.message);
-        }
-        
-        // Return balance in SOL
-        return data.result.value / 1e9;
-    }
-    
-    /**
-     * Request airdrop (devnet only)
-     */
-    async requestAirdrop(amount = 1) {
-        if (this.cluster !== 'devnet') {
-            throw new Error('AIRDROP_DEVNET_ONLY');
-        }
-        
-        if (!this.publicKey) {
-            throw new Error('WALLET_NOT_CONNECTED');
-        }
-        
-        const rpcUrl = CLUSTERS[this.cluster];
-        
-        const response = await fetch(rpcUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                jsonrpc: '2.0',
-                id: 1,
-                method: 'requestAirdrop',
-                params: [this.publicKey, amount * 1e9]
-            })
-        });
-        
-        const data = await response.json();
-        
-        if (data.error) {
-            throw new Error(data.error.message);
-        }
-        
-        return data.result;
-    }
-    
-    /**
-     * Event emitter - on
-     */
-    on(event, callback) {
-        if (!this._listeners.has(event)) {
-            this._listeners.set(event, []);
-        }
-        this._listeners.get(event).push(callback);
-    }
-    
-    /**
-     * Event emitter - off
-     */
-    off(event, callback) {
-        if (!this._listeners.has(event)) return;
-        
-        const callbacks = this._listeners.get(event);
-        const index = callbacks.indexOf(callback);
-        
-        if (index > -1) {
-            callbacks.splice(index, 1);
-        }
-    }
-    
-    /**
-     * Event emitter - emit
-     */
-    _emit(event, data) {
-        if (!this._listeners.has(event)) return;
-        
-        this._listeners.get(event).forEach(callback => {
-            try {
-                callback(data);
-            } catch (error) {
-                console.error(`Error in ${event} listener:`, error);
-            }
-        });
-    }
-    
-    /**
-     * Get short address
-     */
-    getShortAddress() {
-        if (!this.publicKey) return null;
-        return `${this.publicKey.slice(0, 4)}...${this.publicKey.slice(-4)}`;
-    }
-    
-    /**
-     * Check if wallet is connected
-     */
-    isConnected() {
-        return this.connected && this.publicKey !== null;
-    }
+    const browseUrl = wallet.browse(url);
+    console.log('Opening wallet browser:', browseUrl);
+    window.location.href = browseUrl;
+    return true;
 }
 
 /**
- * Wallet selection modal for mobile deep linking
+ * Try to connect with any available wallet
  */
-class WalletSelector {
-    constructor() {
-        this.wallets = [
-            {
-                name: 'Phantom',
-                icon: '/assets/wallets/phantom.svg',
-                adapter: 'phantom',
-                deeplink: (url) => `https://phantom.app/ul/browse/${encodeURIComponent(url)}`,
-                appStore: 'https://apps.apple.com/app/phantom-solana-wallet/id1598432977',
-                playStore: 'https://play.google.com/store/apps/details?id=app.phantom'
-            },
-            {
-                name: 'Solflare',
-                icon: '/assets/wallets/solflare.svg',
-                adapter: 'solflare',
-                deeplink: (url) => `https://solflare.com/ul/v1/browse/${encodeURIComponent(url)}`,
-                appStore: 'https://apps.apple.com/app/solflare/id1580902717',
-                playStore: 'https://play.google.com/store/apps/details?id=com.solflare.mobile'
-            },
-            {
-                name: 'Backpack',
-                icon: '/assets/wallets/backpack.svg',
-                adapter: 'backpack',
-                deeplink: (url) => `https://backpack.app/ul/v1/browse/${encodeURIComponent(url)}`,
-                appStore: 'https://apps.apple.com/app/backpack-crypto-wallet/id6444328103',
-                playStore: 'https://play.google.com/store/apps/details?id=app.backpack.mobile'
-            }
-        ];
+async function autoConnect() {
+    const injected = getInjectedProvider();
+    if (injected) {
+        try {
+            const response = await injected.provider.connect({ onlyIfTrusted: true });
+            return {
+                publicKey: response.publicKey.toString(),
+                providerName: injected.name
+            };
+        } catch (e) {
+            // Auto-connect not available or not trusted
+            return null;
+        }
     }
-    
-    /**
-     * Show wallet selection modal
-     */
-    show() {
-        return new Promise((resolve, reject) => {
-            // Remove existing modal
-            const existing = document.getElementById('mwa-wallet-modal');
-            if (existing) existing.remove();
-            
-            const modal = document.createElement('div');
-            modal.id = 'mwa-wallet-modal';
-            modal.innerHTML = this._getModalHTML();
-            
-            // Add styles
-            this._injectStyles();
-            
-            document.body.appendChild(modal);
-            
-            // Animate in
-            requestAnimationFrame(() => {
-                modal.classList.add('visible');
-            });
-            
-            // Event listeners
-            modal.querySelector('.mwa-modal-close').addEventListener('click', () => {
-                this._close(modal);
-                reject(new Error('USER_CANCELLED'));
-            });
-            
-            modal.querySelector('.mwa-modal-overlay').addEventListener('click', (e) => {
-                if (e.target === e.currentTarget) {
-                    this._close(modal);
-                    reject(new Error('USER_CANCELLED'));
-                }
-            });
-            
-            // Wallet buttons
-            modal.querySelectorAll('.mwa-wallet-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const walletName = btn.dataset.wallet;
-                    const wallet = this.wallets.find(w => w.adapter === walletName);
-                    
-                    if (wallet) {
-                        this._close(modal);
-                        resolve(wallet);
-                    }
-                });
-            });
-        });
-    }
-    
-    /**
-     * Generate modal HTML
-     */
-    _getModalHTML() {
-        return `
-            <div class="mwa-modal-overlay">
-                <div class="mwa-modal-content">
-                    <div class="mwa-modal-header">
-                        <h3>Connect Wallet</h3>
-                        <button class="mwa-modal-close" aria-label="Close">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M18 6L6 18M6 6l12 12"/>
-                            </svg>
-                        </button>
-                    </div>
-                    
-                    <p class="mwa-modal-desc">Select a wallet to connect to this dApp</p>
-                    
-                    <div class="mwa-wallet-list">
-                        ${this.wallets.map(wallet => `
-                            <button class="mwa-wallet-btn" data-wallet="${wallet.adapter}">
-                                <img src="${wallet.icon}" alt="${wallet.name}" class="mwa-wallet-icon" />
-                                <span class="mwa-wallet-name">${wallet.name}</span>
-                                <svg class="mwa-wallet-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M9 18l6-6-6-6"/>
-                                </svg>
-                            </button>
-                        `).join('')}
-                    </div>
-                    
-                    <div class="mwa-modal-footer">
-                        <p>New to Solana? <a href="https://phantom.app/download" target="_blank" rel="noopener">Get a wallet</a></p>
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-    
-    /**
-     * Inject modal styles
-     */
-    _injectStyles() {
-        if (document.getElementById('mwa-modal-styles')) return;
-        
-        const style = document.createElement('style');
-        style.id = 'mwa-modal-styles';
-        style.textContent = `
-            #mwa-wallet-modal {
-                position: fixed;
-                inset: 0;
-                z-index: 99999;
-                opacity: 0;
-                transition: opacity 0.2s ease;
-            }
-            
-            #mwa-wallet-modal.visible {
-                opacity: 1;
-            }
-            
-            .mwa-modal-overlay {
-                position: absolute;
-                inset: 0;
-                background: rgba(0, 0, 0, 0.8);
-                backdrop-filter: blur(4px);
-                display: flex;
-                align-items: flex-end;
-                justify-content: center;
-                padding: 16px;
-            }
-            
-            .mwa-modal-content {
-                background: linear-gradient(180deg, #1E1E2E 0%, #13131D 100%);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                border-radius: 24px 24px 0 0;
-                width: 100%;
-                max-width: 400px;
-                padding: 24px;
-                transform: translateY(100%);
-                animation: mwaSlideUp 0.3s ease forwards;
-            }
-            
-            @keyframes mwaSlideUp {
-                to { transform: translateY(0); }
-            }
-            
-            .mwa-modal-header {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 8px;
-            }
-            
-            .mwa-modal-header h3 {
-                margin: 0;
-                font-size: 20px;
-                font-weight: 600;
-                color: #fff;
-            }
-            
-            .mwa-modal-close {
-                background: rgba(255, 255, 255, 0.1);
-                border: none;
-                border-radius: 12px;
-                width: 40px;
-                height: 40px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: #fff;
-                cursor: pointer;
-                transition: background 0.2s;
-            }
-            
-            .mwa-modal-close:hover {
-                background: rgba(255, 255, 255, 0.15);
-            }
-            
-            .mwa-modal-desc {
-                color: rgba(255, 255, 255, 0.6);
-                font-size: 14px;
-                margin-bottom: 24px;
-            }
-            
-            .mwa-wallet-list {
-                display: flex;
-                flex-direction: column;
-                gap: 12px;
-            }
-            
-            .mwa-wallet-btn {
-                display: flex;
-                align-items: center;
-                gap: 16px;
-                width: 100%;
-                padding: 16px;
-                background: rgba(255, 255, 255, 0.05);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                border-radius: 16px;
-                cursor: pointer;
-                transition: all 0.2s ease;
-            }
-            
-            .mwa-wallet-btn:hover {
-                background: rgba(255, 255, 255, 0.1);
-                border-color: rgba(153, 69, 255, 0.5);
-                transform: translateY(-2px);
-            }
-            
-            .mwa-wallet-btn:active {
-                transform: translateY(0);
-            }
-            
-            .mwa-wallet-icon {
-                width: 48px;
-                height: 48px;
-                border-radius: 12px;
-            }
-            
-            .mwa-wallet-name {
-                flex: 1;
-                text-align: left;
-                font-size: 16px;
-                font-weight: 500;
-                color: #fff;
-            }
-            
-            .mwa-wallet-arrow {
-                color: rgba(255, 255, 255, 0.4);
-            }
-            
-            .mwa-modal-footer {
-                margin-top: 24px;
-                padding-top: 16px;
-                border-top: 1px solid rgba(255, 255, 255, 0.1);
-                text-align: center;
-            }
-            
-            .mwa-modal-footer p {
-                margin: 0;
-                font-size: 14px;
-                color: rgba(255, 255, 255, 0.5);
-            }
-            
-            .mwa-modal-footer a {
-                color: #9945FF;
-                text-decoration: none;
-            }
-            
-            .mwa-modal-footer a:hover {
-                text-decoration: underline;
-            }
-            
-            @media (min-width: 480px) {
-                .mwa-modal-overlay {
-                    align-items: center;
-                }
-                
-                .mwa-modal-content {
-                    border-radius: 24px;
-                }
-            }
-        `;
-        
-        document.head.appendChild(style);
-    }
-    
-    /**
-     * Close modal
-     */
-    _close(modal) {
-        modal.classList.remove('visible');
-        setTimeout(() => modal.remove(), 200);
-    }
-    
-    /**
-     * Open wallet via deep link
-     */
-    openWallet(wallet) {
-        const currentUrl = window.location.href;
-        const deeplink = wallet.deeplink(currentUrl);
-        
-        window.location.href = deeplink;
-    }
+    return null;
 }
 
-// Export
-export { MobileWalletAdapter, WalletSelector, CLUSTERS };
-export default MobileWalletAdapter;
+// ==========================================================================
+// Initialize and Export
+// ==========================================================================
+
+// Make classes and functions available globally
+window.MobileWalletAdapter = MobileWalletAdapter;
+window.openWalletBrowser = openWalletBrowser;
+window.getInjectedProvider = getInjectedProvider;
+window.isAndroid = isAndroid;
+window.isSeeker = isSeeker;
+window.isMobileDevice = isMobileDevice;
+window.autoConnect = autoConnect;
+window.WALLET_DEEP_LINKS = WALLET_DEEP_LINKS;
+
+// Log initialization
+console.log('[MWA] Module loaded', {
+    isAndroid: isAndroid(),
+    isSeeker: isSeeker(),
+    hasInjectedProvider: !!getInjectedProvider(),
+    injectedProvider: getInjectedProvider()?.name || 'none'
+});
+
+// If we have an injected provider, we're in a wallet browser!
+const provider = getInjectedProvider();
+if (provider) {
+    console.log(`[MWA] Running inside ${provider.name} wallet browser!`);
+}

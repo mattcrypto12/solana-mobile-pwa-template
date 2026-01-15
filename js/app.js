@@ -38,7 +38,23 @@ class SolanaMobilePWA {
         this.bindEvents();
         this.initializeSettings();
         this.registerServiceWorker();
+        this.checkForWalletProvider(); // Check if we're in a wallet browser
         this.hideSplashScreen();
+    }
+    
+    // Check if we're in a wallet's in-app browser and auto-connect
+    async checkForWalletProvider() {
+        // Wait a bit for providers to inject
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        if (typeof getInjectedProvider === 'function') {
+            const injected = getInjectedProvider();
+            if (injected) {
+                console.log('Found injected provider:', injected.name);
+                // We're in a wallet browser! Show a connect prompt
+                this.showToast(`${injected.name} detected! Tap Connect Wallet to continue.`, 'info');
+            }
+        }
     }
     
     cacheElements() {
@@ -612,67 +628,54 @@ class SolanaMobilePWA {
     
     async connectWithMWA() {
         // Connect using Mobile Wallet Adapter (for Seeker phones and Android wallets)
-        const isSeeker = /seeker|saga|solanamobile/i.test(navigator.userAgent);
+        const onSeeker = typeof isSeeker === 'function' ? isSeeker() : /seeker|saga|solanamobile/i.test(navigator.userAgent);
         
-        if (isSeeker) {
-            this.showToast('Connecting to Seeker wallet...', 'info');
-        } else {
-            this.showToast('Looking for mobile wallets...', 'info');
-        }
-        
-        try {
-            // Check if MobileWalletAdapter class is available (from mwa.js)
-            if (typeof MobileWalletAdapter !== 'undefined') {
-                const mwa = new MobileWalletAdapter({ cluster: 'devnet' });
-                
-                // Show connecting state
-                if (isSeeker) {
-                    this.showToast('Opening wallet selector...', 'info');
-                }
-                
-                const result = await mwa.connect();
-                
-                if (result && result.publicKey) {
-                    this.walletAddress = result.publicKey;
+        // First check if we're already in a wallet's in-app browser
+        if (typeof getInjectedProvider === 'function') {
+            const injected = getInjectedProvider();
+            if (injected) {
+                this.showToast(`Found ${injected.name}! Connecting...`, 'info');
+                try {
+                    const resp = await injected.provider.connect();
+                    this.walletAddress = resp.publicKey.toString();
                     this.isWalletConnected = true;
                     this.updateWalletUI();
                     this.fetchBalance();
-                    this.showToast('✓ Wallet connected via MWA!', 'success');
+                    this.showToast(`✓ Connected via ${injected.name}!`, 'success');
                     return;
+                } catch (e) {
+                    console.error('Injected provider error:', e);
+                    if (e.code === 4001) {
+                        this.showToast('Connection rejected by user', 'warning');
+                        return;
+                    }
                 }
             }
-            
-            // Fallback: Try to use injected provider directly
-            const provider = window.phantom?.solana || window.solflare || window.solana;
-            if (provider) {
-                const resp = await provider.connect();
-                this.walletAddress = resp.publicKey.toString();
-                this.isWalletConnected = true;
-                this.updateWalletUI();
-                this.fetchBalance();
-                this.showToast('✓ Wallet connected!', 'success');
+        }
+        
+        // Not in a wallet browser - need to open one
+        if (onSeeker) {
+            this.showToast('Opening Phantom wallet...', 'info');
+        } else {
+            this.showToast('Opening wallet app...', 'info');
+        }
+        
+        try {
+            // Use the openWalletBrowser function from mwa.js
+            if (typeof openWalletBrowser === 'function') {
+                // On Seeker, default to Phantom (pre-installed)
+                openWalletBrowser('phantom');
+                // Page will navigate to wallet's in-app browser
                 return;
             }
             
-            // On Seeker, try deep linking to Phantom which is pre-installed
-            if (isSeeker) {
-                this.showToast('Opening Phantom...', 'info');
-                const currentUrl = encodeURIComponent(window.location.href);
-                window.location.href = `phantom://browse/${currentUrl}`;
-                return;
-            }
+            // Fallback: manual deep link
+            const currentUrl = encodeURIComponent(window.location.href);
+            window.location.href = `https://phantom.app/ul/browse/${currentUrl}`;
             
-            // No wallet found - show helpful message
-            this.showToast('No mobile wallet detected. Try selecting a specific wallet.', 'warning');
         } catch (error) {
             console.error('MWA connection error:', error);
-            
-            // On Seeker, provide a more helpful fallback
-            if (isSeeker) {
-                this.showToast('Try selecting Phantom or Solflare directly.', 'warning');
-            } else {
-                this.showToast('Connection failed. Try a specific wallet.', 'error');
-            }
+            this.showToast('Could not open wallet. Try selecting a specific wallet.', 'error');
         }
     }
     
