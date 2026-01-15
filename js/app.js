@@ -313,44 +313,51 @@ class SolanaMobilePWA {
                 <div class="wallet-modal-content">
                     <div class="wallet-modal-header">
                         <h3>Connect Wallet</h3>
-                        <button class="wallet-modal-close-btn" aria-label="Close">&times;</button>
+                        <button class="wallet-modal-close-btn" aria-label="Close">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M18 6L6 18M6 6l12 12"/>
+                            </svg>
+                        </button>
                     </div>
-                    <p class="wallet-modal-description">Select a wallet to connect. You'll be redirected to the wallet app.</p>
+                    <p class="wallet-modal-description">Select a wallet to connect to this dApp</p>
                     
                     <div class="wallet-options-list">
                         <button class="wallet-option-btn" data-wallet="phantom">
-                            <div class="wallet-option-icon">👻</div>
+                            <img src="/assets/wallets/phantom.svg" alt="Phantom" class="wallet-option-icon" />
                             <div class="wallet-option-info">
                                 <span class="wallet-option-name">Phantom</span>
                                 <span class="wallet-option-desc">Popular Solana wallet</span>
                             </div>
-                            <span class="wallet-option-arrow">→</span>
+                            <svg class="wallet-option-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M9 18l6-6-6-6"/>
+                            </svg>
                         </button>
                         
                         <button class="wallet-option-btn" data-wallet="solflare">
-                            <div class="wallet-option-icon">🔥</div>
+                            <img src="/assets/wallets/solflare.svg" alt="Solflare" class="wallet-option-icon" />
                             <div class="wallet-option-info">
                                 <span class="wallet-option-name">Solflare</span>
                                 <span class="wallet-option-desc">Full-featured wallet</span>
                             </div>
-                            <span class="wallet-option-arrow">→</span>
+                            <svg class="wallet-option-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M9 18l6-6-6-6"/>
+                            </svg>
                         </button>
                         
                         <button class="wallet-option-btn" data-wallet="backpack">
-                            <div class="wallet-option-icon">🎒</div>
+                            <img src="/assets/wallets/backpack.svg" alt="Backpack" class="wallet-option-icon" />
                             <div class="wallet-option-info">
                                 <span class="wallet-option-name">Backpack</span>
                                 <span class="wallet-option-desc">xNFT wallet</span>
                             </div>
-                            <span class="wallet-option-arrow">→</span>
+                            <svg class="wallet-option-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M9 18l6-6-6-6"/>
+                            </svg>
                         </button>
                     </div>
                     
                     <div class="wallet-modal-footer">
-                        <p class="wallet-template-note">
-                            <strong>📋 Template Note:</strong> This is a sample PWA template. 
-                            In production, clicking these buttons would deep-link to the wallet apps.
-                        </p>
+                        <p class="wallet-footer-text">New to Solana? <a href="https://phantom.app/download" target="_blank" rel="noopener">Get a wallet</a></p>
                         <button class="wallet-demo-btn">Try Demo Mode</button>
                     </div>
                 </div>
@@ -365,6 +372,7 @@ class SolanaMobilePWA {
                 position: fixed;
                 inset: 0;
                 background: rgba(0, 0, 0, 0.85);
+                backdrop-filter: blur(4px);
                 display: flex;
                 align-items: flex-end;
                 justify-content: center;
@@ -376,7 +384,8 @@ class SolanaMobilePWA {
                 to { opacity: 1; }
             }
             .wallet-modal-content {
-                background: var(--surface-color, #1A1A1A);
+                background: linear-gradient(180deg, #1E1E2E 0%, #13131D 100%);
+                border: 1px solid rgba(255, 255, 255, 0.1);
                 border-radius: 24px 24px 0 0;
                 padding: 24px;
                 width: 100%;
@@ -397,21 +406,29 @@ class SolanaMobilePWA {
             }
             .wallet-modal-header h3 {
                 margin: 0;
-                color: var(--text-primary, #fff);
+                color: #fff;
                 font-size: 20px;
+                font-weight: 600;
             }
             .wallet-modal-close-btn {
-                background: none;
+                background: rgba(255, 255, 255, 0.1);
                 border: none;
-                color: var(--text-secondary, #888);
-                font-size: 28px;
+                border-radius: 12px;
+                width: 40px;
+                height: 40px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: #fff;
                 cursor: pointer;
-                padding: 0;
-                line-height: 1;
+                transition: background 0.2s;
+            }
+            .wallet-modal-close-btn:hover {
+                background: rgba(255, 255, 255, 0.15);
             }
             .wallet-modal-description {
-                color: var(--text-secondary, #888);
-                margin-bottom: 20px;
+                color: rgba(255, 255, 255, 0.6);
+                margin-bottom: 24px;
                 font-size: 14px;
             }
             .wallet-options-list {
@@ -425,8 +442,8 @@ class SolanaMobilePWA {
                 align-items: center;
                 gap: 16px;
                 padding: 16px;
-                background: var(--surface-elevated, #252525);
-                border: 1px solid var(--border-color, #333);
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.1);
                 border-radius: 16px;
                 cursor: pointer;
                 transition: all 0.2s ease;
@@ -434,18 +451,18 @@ class SolanaMobilePWA {
                 text-align: left;
             }
             .wallet-option-btn:hover {
-                background: var(--surface-hover, #2a2a2a);
-                border-color: var(--primary-color, #9945FF);
+                background: rgba(255, 255, 255, 0.1);
+                border-color: rgba(153, 69, 255, 0.5);
+                transform: translateY(-2px);
+            }
+            .wallet-option-btn:active {
+                transform: translateY(0);
             }
             .wallet-option-icon {
-                font-size: 32px;
                 width: 48px;
                 height: 48px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                background: var(--surface-color, #1a1a1a);
                 border-radius: 12px;
+                object-fit: cover;
             }
             .wallet-option-info {
                 flex: 1;
@@ -454,33 +471,33 @@ class SolanaMobilePWA {
                 gap: 2px;
             }
             .wallet-option-name {
-                color: var(--text-primary, #fff);
+                color: #fff;
                 font-weight: 600;
                 font-size: 16px;
             }
             .wallet-option-desc {
-                color: var(--text-secondary, #888);
+                color: rgba(255, 255, 255, 0.5);
                 font-size: 13px;
             }
             .wallet-option-arrow {
-                color: var(--text-secondary, #888);
-                font-size: 18px;
+                color: rgba(255, 255, 255, 0.4);
             }
             .wallet-modal-footer {
-                border-top: 1px solid var(--border-color, #333);
+                border-top: 1px solid rgba(255, 255, 255, 0.1);
                 padding-top: 16px;
             }
-            .wallet-template-note {
-                background: rgba(153, 69, 255, 0.1);
-                border: 1px solid rgba(153, 69, 255, 0.3);
-                border-radius: 12px;
-                padding: 12px;
-                font-size: 13px;
-                color: var(--text-secondary, #aaa);
+            .wallet-footer-text {
+                text-align: center;
+                font-size: 14px;
+                color: rgba(255, 255, 255, 0.5);
                 margin-bottom: 12px;
             }
-            .wallet-template-note strong {
-                color: var(--primary-color, #9945FF);
+            .wallet-footer-text a {
+                color: #9945FF;
+                text-decoration: none;
+            }
+            .wallet-footer-text a:hover {
+                text-decoration: underline;
             }
             .wallet-demo-btn {
                 width: 100%;
@@ -492,10 +509,21 @@ class SolanaMobilePWA {
                 font-weight: 600;
                 font-size: 16px;
                 cursor: pointer;
-                transition: opacity 0.2s;
+                transition: opacity 0.2s, transform 0.2s;
             }
             .wallet-demo-btn:hover {
                 opacity: 0.9;
+            }
+            .wallet-demo-btn:active {
+                transform: scale(0.98);
+            }
+            @media (min-width: 480px) {
+                .wallet-modal-overlay {
+                    align-items: center;
+                }
+                .wallet-modal-content {
+                    border-radius: 24px;
+                }
             }
         `;
         

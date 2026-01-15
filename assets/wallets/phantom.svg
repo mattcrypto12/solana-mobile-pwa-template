@@ -1,0 +1,16 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="128" height="128" rx="26" fill="url(#phantom-gradient)"/>
+  <path d="M110.584 64.9142H99.142C99.142 41.7651 80.173 23 56.7724 23C33.6612 23 14.8716 41.3057 14.4032 64.0583C13.9206 87.4325 34.0484 107 57.6313 107H61.3285C81.6932 107 110.584 85.5571 110.584 64.9142Z" fill="url(#phantom-inner)"/>
+  <circle cx="43" cy="57" r="7" fill="white"/>
+  <circle cx="70" cy="57" r="7" fill="white"/>
+  <defs>
+    <linearGradient id="phantom-gradient" x1="0" y1="0" x2="128" y2="128" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#534BB1"/>
+      <stop offset="1" stop-color="#551BF9"/>
+    </linearGradient>
+    <linearGradient id="phantom-inner" x1="14" y1="23" x2="110" y2="107" gradientUnits="userSpaceOnUse">
+      <stop stop-color="white"/>
+      <stop offset="1" stop-color="#E8E8E8"/>
+    </linearGradient>
+  </defs>
+</svg>

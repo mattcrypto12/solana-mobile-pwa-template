@@ -1,0 +1,17 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="128" height="128" rx="26" fill="#121212"/>
+  <path d="M64 20L96 44V84L64 108L32 84V44L64 20Z" fill="url(#solflare-gradient)"/>
+  <path d="M64 32L84 48V80L64 96L44 80V48L64 32Z" fill="url(#solflare-inner)"/>
+  <ellipse cx="64" cy="64" rx="12" ry="16" fill="#FC822B"/>
+  <defs>
+    <linearGradient id="solflare-gradient" x1="32" y1="20" x2="96" y2="108" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FCC044"/>
+      <stop offset="0.5" stop-color="#FC822B"/>
+      <stop offset="1" stop-color="#F2473D"/>
+    </linearGradient>
+    <linearGradient id="solflare-inner" x1="44" y1="32" x2="84" y2="96" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFEB3B"/>
+      <stop offset="1" stop-color="#FF9800"/>
+    </linearGradient>
+  </defs>
+</svg>

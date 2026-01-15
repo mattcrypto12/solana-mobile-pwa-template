@@ -7,7 +7,7 @@
 const MOBILE_WALLETS = {
     phantom: {
         name: 'Phantom',
-        icon: '/assets/wallets/phantom.png',
+        icon: '/assets/wallets/phantom.svg',
         scheme: 'phantom://',
         appStoreUrl: 'https://apps.apple.com/app/phantom-solana-wallet/id1598432977',
         playStoreUrl: 'https://play.google.com/store/apps/details?id=app.phantom',
@@ -15,7 +15,7 @@ const MOBILE_WALLETS = {
     },
     solflare: {
         name: 'Solflare',
-        icon: '/assets/wallets/solflare.png',
+        icon: '/assets/wallets/solflare.svg',
         scheme: 'solflare://',
         appStoreUrl: 'https://apps.apple.com/app/solflare/id1580902717',
         playStoreUrl: 'https://play.google.com/store/apps/details?id=com.solflare.mobile',
@@ -23,7 +23,7 @@ const MOBILE_WALLETS = {
     },
     backpack: {
         name: 'Backpack',
-        icon: '/assets/wallets/backpack.png',
+        icon: '/assets/wallets/backpack.svg',
         scheme: 'backpack://',
         appStoreUrl: 'https://apps.apple.com/app/backpack-crypto-wallet/id6444328103',
         playStoreUrl: 'https://play.google.com/store/apps/details?id=app.backpack.mobile',
