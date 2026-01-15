@@ -653,25 +653,16 @@ class SolanaMobilePWA {
             }
         }
         
-        // Not in a wallet browser - need to open one
-        if (onSeeker) {
-            this.showToast('Opening Phantom wallet...', 'info');
-        } else {
-            this.showToast('Opening wallet app...', 'info');
-        }
+        // Not in a wallet browser - use MWA intent to show wallet chooser
+        this.showToast('Opening wallet selector...', 'info');
         
         try {
-            // Use the openWalletBrowser function from mwa.js
-            if (typeof openWalletBrowser === 'function') {
-                // On Seeker, default to Phantom (pre-installed)
-                openWalletBrowser('phantom');
-                // Page will navigate to wallet's in-app browser
-                return;
-            }
+            // Use the solana-wallet:// protocol to trigger Android's wallet chooser
+            // This will show all installed wallets that support MWA
+            const mwaUrl = 'solana-wallet://v1/associate/local';
             
-            // Fallback: manual deep link
-            const currentUrl = encodeURIComponent(window.location.href);
-            window.location.href = `https://phantom.app/ul/browse/${currentUrl}`;
+            console.log('MWA: Opening wallet chooser via:', mwaUrl);
+            window.location.href = mwaUrl;
             
         } catch (error) {
             console.error('MWA connection error:', error);
