@@ -400,8 +400,14 @@ class SolanaMobilePWA {
                         <button class="wallet-option-btn mwa-option" data-wallet="mwa">
                             <div class="wallet-option-icon mwa-icon">
                                 <svg viewBox="0 0 24 24" fill="none">
-                                    <circle cx="12" cy="12" r="10" stroke="url(#mwaGrad)" stroke-width="2"/>
-                                    <path d="M8 12h8M12 8v8" stroke="url(#mwaGrad)" stroke-width="2" stroke-linecap="round"/>
+                                    <!-- Mobile phone outline with Solana gradient -->
+                                    <rect x="5" y="2" width="14" height="20" rx="2" stroke="url(#mwaGrad)" stroke-width="1.5" fill="none"/>
+                                    <!-- Screen area -->
+                                    <rect x="7" y="5" width="10" height="12" rx="1" fill="url(#mwaGrad)" fill-opacity="0.2"/>
+                                    <!-- Solana logo simplified - three stacked bars -->
+                                    <path d="M8 8h8M8 11h8M8 14h8" stroke="url(#mwaGrad)" stroke-width="1.5" stroke-linecap="round"/>
+                                    <!-- Home button/notch -->
+                                    <circle cx="12" cy="19.5" r="1" fill="url(#mwaGrad)"/>
                                     <defs>
                                         <linearGradient id="mwaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
                                             <stop offset="0%" style="stop-color:#9945FF"/>

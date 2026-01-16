@@ -1,7 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 56 56" fill="none">
+  <!-- Official Backpack wallet icon - coral red backpack shape -->
   <rect width="56" height="56" rx="12" fill="#E33E3F"/>
-  <path d="M28 12C19.163 12 12 19.163 12 28C12 36.837 19.163 44 28 44C36.837 44 44 36.837 44 28C44 19.163 36.837 12 28 12Z" fill="white"/>
-  <path d="M28 16C21.373 16 16 21.373 16 28C16 34.627 21.373 40 28 40C34.627 40 40 34.627 40 28C40 21.373 34.627 16 28 16Z" fill="#E33E3F"/>
-  <path d="M28 20C23.582 20 20 23.582 20 28C20 32.418 23.582 36 28 36C32.418 36 36 32.418 36 28C36 23.582 32.418 20 28 20Z" fill="white"/>
-  <path d="M28 24C25.791 24 24 25.791 24 28C24 30.209 25.791 32 28 32C30.209 32 32 30.209 32 28C32 25.791 30.209 24 28 24Z" fill="#E33E3F"/>
+  <!-- Backpack handle -->
+  <path d="M22 16h12v3c0 1-1 2-2 2H24c-1 0-2-1-2-2v-3z" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Main backpack body -->
+  <rect x="16" y="20" width="24" height="24" rx="4" fill="white"/>
+  <!-- Front pocket -->
+  <rect x="20" y="28" width="16" height="12" rx="2" fill="#E33E3F"/>
+  <!-- Zipper line -->
+  <line x1="20" y1="32" x2="36" y2="32" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- Pocket detail -->
+  <rect x="24" y="34" width="8" height="4" rx="1" fill="white" fill-opacity="0.3"/>
 </svg>
