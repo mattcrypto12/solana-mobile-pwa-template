@@ -678,12 +678,35 @@ class SolanaMobilePWA {
                     return auth;
                 });
                 
+                console.log('[App] MWA result:', JSON.stringify(result, null, 2));
+                
                 if (result && result.accounts && result.accounts.length > 0) {
-                    this.walletAddress = result.accounts[0].address;
-                    this.isWalletConnected = true;
-                    this.updateWalletUI();
-                    this.fetchBalance();
-                    this.showToast('✓ Wallet connected via MWA!', 'success');
+                    const account = result.accounts[0];
+                    console.log('[App] Account data:', JSON.stringify(account, null, 2));
+                    
+                    // MWA returns base64-encoded address, need to convert to base58
+                    // Use display_address if available, otherwise convert from base64
+                    let address;
+                    if (account.display_address) {
+                        address = account.display_address;
+                    } else if (account.address) {
+                        // Convert base64 to base58
+                        address = this.base64ToBase58(account.address);
+                    }
+                    
+                    if (address) {
+                        this.walletAddress = address;
+                        this.isWalletConnected = true;
+                        this.updateWalletUI();
+                        this.fetchBalance();
+                        this.showToast('✓ Wallet connected via MWA!', 'success');
+                    } else {
+                        console.error('[App] No valid address in MWA response');
+                        this.showToast('Failed to get wallet address', 'error');
+                    }
+                } else {
+                    console.log('[App] No accounts in MWA result');
+                    this.showToast('No accounts returned from wallet', 'warning');
                 }
             } else {
                 console.error('[App] transact function not available');
@@ -760,6 +783,52 @@ class SolanaMobilePWA {
         return `${address.slice(0, 4)}...${address.slice(-4)}`;
     }
     
+    // Convert base64-encoded address to base58 (Solana address format)
+    base64ToBase58(base64) {
+        try {
+            // Decode base64 to bytes
+            const binaryString = atob(base64);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            
+            // Base58 alphabet (Bitcoin/Solana style)
+            const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+            
+            // Convert bytes to base58
+            const digits = [0];
+            for (let i = 0; i < bytes.length; i++) {
+                let carry = bytes[i];
+                for (let j = 0; j < digits.length; j++) {
+                    carry += digits[j] << 8;
+                    digits[j] = carry % 58;
+                    carry = (carry / 58) | 0;
+                }
+                while (carry > 0) {
+                    digits.push(carry % 58);
+                    carry = (carry / 58) | 0;
+                }
+            }
+            
+            // Handle leading zeros
+            let result = '';
+            for (let i = 0; i < bytes.length && bytes[i] === 0; i++) {
+                result += ALPHABET[0];
+            }
+            
+            // Convert digits to string (reverse order)
+            for (let i = digits.length - 1; i >= 0; i--) {
+                result += ALPHABET[digits[i]];
+            }
+            
+            return result;
+        } catch (e) {
+            console.error('[App] Failed to convert base64 to base58:', e);
+            return base64; // Return original if conversion fails
+        }
+    }
+
     showWalletOptions() {
         // Could show a bottom sheet with wallet options
         this.showToast(`Wallet: ${this.truncateAddress(this.walletAddress)}`, 'info');
