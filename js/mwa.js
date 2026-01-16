@@ -81,14 +81,26 @@ function createSequenceNumberVector(sequenceNumber) {
 }
 
 async function parseHelloRsp(payloadBuffer, associationPublicKey, ecdhPrivateKey) {
+    console.log('[MWA] parseHelloRsp - payload length:', payloadBuffer.byteLength);
+    
+    // The wallet sends: ECDH public key (65 bytes) + signature of association_public_key
+    // We only need the first 65 bytes (the ECDH public key)
+    if (payloadBuffer.byteLength < ENCODED_PUBLIC_KEY_LENGTH_BYTES) {
+        throw new Error(`HELLO_RSP too short: ${payloadBuffer.byteLength} < ${ENCODED_PUBLIC_KEY_LENGTH_BYTES}`);
+    }
+    
     // Import wallet's ECDH public key from response
+    const walletPublicKeyBytes = payloadBuffer.slice(0, ENCODED_PUBLIC_KEY_LENGTH_BYTES);
+    console.log('[MWA] Importing wallet ECDH public key, length:', walletPublicKeyBytes.byteLength);
+    
     const walletPublicKey = await crypto.subtle.importKey(
         'raw',
-        payloadBuffer.slice(0, ENCODED_PUBLIC_KEY_LENGTH_BYTES),
+        walletPublicKeyBytes,
         { name: 'ECDH', namedCurve: 'P-256' },
         false,
         []
     );
+    console.log('[MWA] Wallet public key imported');
     
     // Derive shared secret using ECDH
     const sharedSecret = await crypto.subtle.deriveBits(
@@ -96,6 +108,7 @@ async function parseHelloRsp(payloadBuffer, associationPublicKey, ecdhPrivateKey
         ecdhPrivateKey,
         256
     );
+    console.log('[MWA] Shared secret derived, length:', sharedSecret.byteLength);
     
     // Import shared secret for HKDF
     const ecdhSecretKey = await crypto.subtle.importKey(
@@ -105,9 +118,12 @@ async function parseHelloRsp(payloadBuffer, associationPublicKey, ecdhPrivateKey
         false,
         ['deriveKey']
     );
+    console.log('[MWA] ECDH secret key imported for HKDF');
     
     // Derive AES-GCM key using HKDF
     const associationPublicKeyBuffer = await crypto.subtle.exportKey('raw', associationPublicKey);
+    console.log('[MWA] Association public key exported, length:', associationPublicKeyBuffer.byteLength);
+    
     const aesKey = await crypto.subtle.deriveKey(
         {
             name: 'HKDF',
@@ -120,6 +136,7 @@ async function parseHelloRsp(payloadBuffer, associationPublicKey, ecdhPrivateKey
         false,
         ['encrypt', 'decrypt']
     );
+    console.log('[MWA] AES-GCM key derived successfully');
     
     return aesKey;
 }
@@ -329,13 +346,23 @@ async function transact(callback, config = {}) {
                 params
             };
             
-            console.log('[MWA] Sending request:', method);
+            console.log('[MWA] Preparing to send request:', method, 'id:', id);
+            console.log('[MWA] Request params:', JSON.stringify(params));
             
-            const encryptedMsg = await encryptJsonRpcMessage(request, sharedSecret);
-            socket.send(encryptedMsg);
+            try {
+                const encryptedMsg = await encryptJsonRpcMessage(request, sharedSecret);
+                console.log('[MWA] Message encrypted, length:', encryptedMsg.byteLength);
+                
+                socket.send(encryptedMsg);
+                console.log('[MWA] Message sent to socket');
+            } catch (e) {
+                console.error('[MWA] Failed to encrypt/send message:', e);
+                throw e;
+            }
             
             return new Promise((resolveReq, rejectReq) => {
                 pendingRequests.set(id, { resolve: resolveReq, reject: rejectReq });
+                console.log('[MWA] Waiting for response to id:', id);
             });
         };
         
