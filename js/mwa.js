@@ -15,6 +15,9 @@ const WEBSOCKET_CONNECTION_CONFIG = {
 };
 
 const WEBSOCKET_PROTOCOL = 'com.solana.mobilewalletadapter.v1';
+const SEQUENCE_NUMBER_BYTES = 4;
+const INITIALIZATION_VECTOR_BYTES = 12;
+const ENCODED_PUBLIC_KEY_LENGTH_BYTES = 65;
 
 // ==========================================================================
 // Crypto Utilities
@@ -45,6 +48,15 @@ function arrayBufferToBase64(buffer) {
     return btoa(binary);
 }
 
+function base64ToArrayBuffer(base64) {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes.buffer;
+}
+
 function base64ToUrlSafe(base64) {
     return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
@@ -52,6 +64,123 @@ function base64ToUrlSafe(base64) {
 function getRandomPort() {
     // Per MWA spec: random port between 49152 and 65535
     return 49152 + Math.floor(Math.random() * (65535 - 49152 + 1));
+}
+
+// ==========================================================================
+// Encryption Utilities (from official MWA spec)
+// ==========================================================================
+
+function createSequenceNumberVector(sequenceNumber) {
+    if (sequenceNumber >= 4294967296) {
+        throw new Error('Outbound sequence number overflow');
+    }
+    const byteArray = new ArrayBuffer(SEQUENCE_NUMBER_BYTES);
+    const view = new DataView(byteArray);
+    view.setUint32(0, sequenceNumber, false); // big-endian
+    return new Uint8Array(byteArray);
+}
+
+async function parseHelloRsp(payloadBuffer, associationPublicKey, ecdhPrivateKey) {
+    // Import wallet's ECDH public key from response
+    const walletPublicKey = await crypto.subtle.importKey(
+        'raw',
+        payloadBuffer.slice(0, ENCODED_PUBLIC_KEY_LENGTH_BYTES),
+        { name: 'ECDH', namedCurve: 'P-256' },
+        false,
+        []
+    );
+    
+    // Derive shared secret using ECDH
+    const sharedSecret = await crypto.subtle.deriveBits(
+        { name: 'ECDH', public: walletPublicKey },
+        ecdhPrivateKey,
+        256
+    );
+    
+    // Import shared secret for HKDF
+    const ecdhSecretKey = await crypto.subtle.importKey(
+        'raw',
+        sharedSecret,
+        'HKDF',
+        false,
+        ['deriveKey']
+    );
+    
+    // Derive AES-GCM key using HKDF
+    const associationPublicKeyBuffer = await crypto.subtle.exportKey('raw', associationPublicKey);
+    const aesKey = await crypto.subtle.deriveKey(
+        {
+            name: 'HKDF',
+            hash: 'SHA-256',
+            salt: new Uint8Array(associationPublicKeyBuffer),
+            info: new Uint8Array(),
+        },
+        ecdhSecretKey,
+        { name: 'AES-GCM', length: 128 },
+        false,
+        ['encrypt', 'decrypt']
+    );
+    
+    return aesKey;
+}
+
+async function encryptMessage(plaintext, sequenceNumber, sharedSecret) {
+    const sequenceNumberVector = createSequenceNumberVector(sequenceNumber);
+    const initializationVector = new Uint8Array(INITIALIZATION_VECTOR_BYTES);
+    crypto.getRandomValues(initializationVector);
+    
+    const ciphertext = await crypto.subtle.encrypt(
+        {
+            name: 'AES-GCM',
+            iv: initializationVector,
+            additionalData: sequenceNumberVector,
+            tagLength: 128,
+        },
+        sharedSecret,
+        new TextEncoder().encode(plaintext)
+    );
+    
+    const response = new Uint8Array(
+        sequenceNumberVector.byteLength + initializationVector.byteLength + ciphertext.byteLength
+    );
+    response.set(sequenceNumberVector, 0);
+    response.set(initializationVector, sequenceNumberVector.byteLength);
+    response.set(new Uint8Array(ciphertext), sequenceNumberVector.byteLength + initializationVector.byteLength);
+    return response;
+}
+
+async function decryptMessage(message, sharedSecret) {
+    const sequenceNumberVector = message.slice(0, SEQUENCE_NUMBER_BYTES);
+    const initializationVector = message.slice(SEQUENCE_NUMBER_BYTES, SEQUENCE_NUMBER_BYTES + INITIALIZATION_VECTOR_BYTES);
+    const ciphertext = message.slice(SEQUENCE_NUMBER_BYTES + INITIALIZATION_VECTOR_BYTES);
+    
+    const plaintextBuffer = await crypto.subtle.decrypt(
+        {
+            name: 'AES-GCM',
+            iv: initializationVector,
+            additionalData: sequenceNumberVector,
+            tagLength: 128,
+        },
+        sharedSecret,
+        ciphertext
+    );
+    
+    return new TextDecoder('utf-8').decode(plaintextBuffer);
+}
+
+async function encryptJsonRpcMessage(jsonRpcMessage, sharedSecret) {
+    const plaintext = JSON.stringify(jsonRpcMessage);
+    const sequenceNumber = jsonRpcMessage.id;
+    return encryptMessage(plaintext, sequenceNumber, sharedSecret);
+}
+
+async function decryptJsonRpcMessage(message, sharedSecret) {
+    const plaintext = await decryptMessage(message, sharedSecret);
+    const jsonRpcMessage = JSON.parse(plaintext);
+    if (jsonRpcMessage.error) {
+        throw new Error(`MWA Error ${jsonRpcMessage.error.code}: ${jsonRpcMessage.error.message}`);
+    }
+    return jsonRpcMessage;
 }
 
 // ==========================================================================
@@ -175,6 +304,9 @@ async function transact(callback, config = {}) {
         let socket;
         let retryTimeoutId;
         let state = { type: 'connecting' };
+        let sharedSecret = null;
+        let nextMessageId = 1;
+        const pendingRequests = new Map();
         
         const cleanup = () => {
             if (retryTimeoutId) {
@@ -186,6 +318,25 @@ async function transact(callback, config = {}) {
                 socket.removeEventListener('error', handleError);
                 socket.removeEventListener('message', handleMessage);
             }
+        };
+        
+        const sendRequest = async (method, params) => {
+            const id = nextMessageId++;
+            const request = {
+                id,
+                jsonrpc: '2.0',
+                method,
+                params
+            };
+            
+            console.log('[MWA] Sending request:', method);
+            
+            const encryptedMsg = await encryptJsonRpcMessage(request, sharedSecret);
+            socket.send(encryptedMsg);
+            
+            return new Promise((resolveReq, rejectReq) => {
+                pendingRequests.set(id, { resolve: resolveReq, reject: rejectReq });
+            });
         };
         
         const handleOpen = async () => {
@@ -200,18 +351,18 @@ async function transact(callback, config = {}) {
             socket.send(helloReq);
             
             console.log('[MWA] Sent HELLO_REQ');
-            state = { type: 'hello_sent', ecdhKeypair };
+            state = { 
+                type: 'hello_sent', 
+                ecdhKeypair,
+                associationPublicKey: associationKeypair.publicKey
+            };
         };
         
         const handleClose = (evt) => {
             console.log('[MWA] WebSocket closed:', evt.code, evt.reason);
-            if (state.type === 'connected' || state.type === 'session_ready') {
-                cleanup();
-                if (evt.wasClean) {
-                    // Normal close
-                } else {
-                    reject(new Error(`Session closed unexpectedly: ${evt.code} ${evt.reason}`));
-                }
+            cleanup();
+            if (!evt.wasClean && state.type !== 'done') {
+                reject(new Error(`Session closed unexpectedly: ${evt.code} ${evt.reason}`));
             }
         };
         
@@ -231,41 +382,96 @@ async function transact(callback, config = {}) {
         };
         
         const handleMessage = async (evt) => {
-            console.log('[MWA] Received message');
-            const data = evt.data;
+            console.log('[MWA] Received message, state:', state.type);
             
-            if (state.type === 'hello_sent') {
-                // This should be HELLO_RSP with wallet's ECDH public key
-                console.log('[MWA] Received HELLO_RSP, session established!');
-                state = { type: 'session_ready' };
+            try {
+                // Handle binary messages
+                let dataBuffer;
+                if (evt.data instanceof Blob) {
+                    dataBuffer = await evt.data.arrayBuffer();
+                } else if (evt.data instanceof ArrayBuffer) {
+                    dataBuffer = evt.data;
+                } else {
+                    console.error('[MWA] Unexpected message type');
+                    return;
+                }
                 
-                // Create a simple wallet interface for the callback
-                // Note: Full implementation would include encryption/decryption
-                const wallet = {
-                    authorize: async (params) => {
-                        console.log('[MWA] authorize called with:', params);
-                        // In real implementation, send encrypted JSON-RPC
-                        return {
-                            accounts: [],
-                            auth_token: null
-                        };
-                    },
-                    signTransactions: async (txs) => {
-                        console.log('[MWA] signTransactions called');
-                        return txs;
-                    },
-                    signMessages: async (msgs) => {
-                        console.log('[MWA] signMessages called');
-                        return msgs;
+                if (state.type === 'hello_sent') {
+                    // Parse HELLO_RSP and derive shared secret
+                    console.log('[MWA] Parsing HELLO_RSP...');
+                    sharedSecret = await parseHelloRsp(
+                        dataBuffer,
+                        state.associationPublicKey,
+                        state.ecdhKeypair.privateKey
+                    );
+                    
+                    console.log('[MWA] Session encrypted! Shared secret derived.');
+                    state = { type: 'session_ready' };
+                    
+                    // Create the wallet API with real encrypted messaging
+                    const wallet = {
+                        authorize: async (params) => {
+                            console.log('[MWA] authorize called');
+                            const result = await sendRequest('authorize', params);
+                            return result.result;
+                        },
+                        reauthorize: async (params) => {
+                            console.log('[MWA] reauthorize called');
+                            const result = await sendRequest('reauthorize', params);
+                            return result.result;
+                        },
+                        deauthorize: async (params) => {
+                            console.log('[MWA] deauthorize called');
+                            const result = await sendRequest('deauthorize', params);
+                            return result.result;
+                        },
+                        signTransactions: async (params) => {
+                            console.log('[MWA] signTransactions called');
+                            const result = await sendRequest('sign_transactions', params);
+                            return result.result;
+                        },
+                        signMessages: async (params) => {
+                            console.log('[MWA] signMessages called');
+                            const result = await sendRequest('sign_messages', params);
+                            return result.result;
+                        },
+                        signAndSendTransactions: async (params) => {
+                            console.log('[MWA] signAndSendTransactions called');
+                            const result = await sendRequest('sign_and_send_transactions', params);
+                            return result.result;
+                        }
+                    };
+                    
+                    // Execute the callback with the wallet API
+                    try {
+                        const result = await callback(wallet);
+                        state = { type: 'done' };
+                        cleanup();
+                        socket.close(1000, 'Normal closure');
+                        resolve(result);
+                    } catch (e) {
+                        state = { type: 'done' };
+                        cleanup();
+                        socket.close(1000, 'Error in callback');
+                        reject(e);
                     }
-                };
-                
-                try {
-                    const result = await callback(wallet);
-                    cleanup();
-                    socket.close();
-                    resolve(result);
-                } catch (e) {
+                    
+                } else if (state.type === 'session_ready' || state.type === 'waiting_response') {
+                    // Decrypt and handle JSON-RPC response
+                    const response = await decryptJsonRpcMessage(dataBuffer, sharedSecret);
+                    console.log('[MWA] Received response for id:', response.id);
+                    
+                    const pending = pendingRequests.get(response.id);
+                    if (pending) {
+                        pendingRequests.delete(response.id);
+                        pending.resolve(response);
+                    }
+                }
+            } catch (e) {
+                console.error('[MWA] Error handling message:', e);
+                // Check if this was a pending request error
+                if (e.message && e.message.startsWith('MWA Error')) {
+                    // Protocol error from wallet
                     cleanup();
                     socket.close();
                     reject(e);
@@ -276,6 +482,7 @@ async function transact(callback, config = {}) {
         const attemptConnection = () => {
             console.log('[MWA] Attempting WebSocket connection...');
             socket = new WebSocket(websocketURL, [WEBSOCKET_PROTOCOL]);
+            socket.binaryType = 'arraybuffer';
             socket.addEventListener('open', handleOpen);
             socket.addEventListener('close', handleClose);
             socket.addEventListener('error', handleError);
