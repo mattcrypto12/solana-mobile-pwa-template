@@ -767,14 +767,41 @@ class SolanaMobilePWA {
     }
     
     async fetchBalance() {
-        // Template: In production, fetch real balance from Solana RPC
-        // Example implementation:
-        // const connection = new Connection('https://api.mainnet-beta.solana.com');
-        // const balance = await connection.getBalance(new PublicKey(this.walletAddress));
-        // this.balance = balance / 1e9; // Convert lamports to SOL
+        if (!this.walletAddress) {
+            this.balance = null;
+            this.updateBalanceDisplay();
+            return;
+        }
         
-        // For demo purposes, use simulated balance
-        this.balance = 2.5;
+        try {
+            // Use devnet RPC to fetch real balance
+            const rpcUrl = 'https://api.devnet.solana.com';
+            const response = await fetch(rpcUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    jsonrpc: '2.0',
+                    id: 1,
+                    method: 'getBalance',
+                    params: [this.walletAddress]
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.result && typeof data.result.value === 'number') {
+                // Convert lamports to SOL (1 SOL = 1e9 lamports)
+                this.balance = data.result.value / 1e9;
+                console.log('[App] Fetched balance:', this.balance, 'SOL');
+            } else {
+                console.warn('[App] Unexpected balance response:', data);
+                this.balance = 0;
+            }
+        } catch (error) {
+            console.error('[App] Failed to fetch balance:', error);
+            this.balance = 0;
+        }
+        
         this.updateBalanceDisplay();
     }
     
@@ -830,8 +857,189 @@ class SolanaMobilePWA {
     }
 
     showWalletOptions() {
-        // Could show a bottom sheet with wallet options
-        this.showToast(`Wallet: ${this.truncateAddress(this.walletAddress)}`, 'info');
+        // Show wallet details modal
+        const existing = document.getElementById('wallet-details-modal');
+        if (existing) existing.remove();
+        
+        const modal = document.createElement('div');
+        modal.id = 'wallet-details-modal';
+        modal.innerHTML = `
+            <div class="wallet-modal-overlay">
+                <div class="wallet-modal-content">
+                    <div class="wallet-modal-header">
+                        <h3>Wallet Connected</h3>
+                        <button class="wallet-modal-close-btn" aria-label="Close">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M18 6L6 18M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    <div class="wallet-details-content">
+                        <div class="wallet-address-display">
+                            <span class="wallet-label">Address</span>
+                            <span class="wallet-address-full">${this.walletAddress}</span>
+                        </div>
+                        
+                        <div class="wallet-balance-display">
+                            <span class="wallet-label">Balance</span>
+                            <span class="wallet-balance-value">${this.balance !== null ? this.balance.toFixed(4) + ' SOL' : 'Loading...'}</span>
+                        </div>
+                        
+                        <div class="wallet-actions">
+                            <button class="wallet-action-btn copy-address-btn">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                                    <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+                                </svg>
+                                Copy Address
+                            </button>
+                            <button class="wallet-action-btn refresh-balance-btn">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M23 4v6h-6M1 20v-6h6"/>
+                                    <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                                </svg>
+                                Refresh Balance
+                            </button>
+                            <button class="wallet-action-btn disconnect-btn">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/>
+                                    <polyline points="16 17 21 12 16 7"/>
+                                    <line x1="21" y1="12" x2="9" y2="12"/>
+                                </svg>
+                                Disconnect
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // Add wallet details styles if not already present
+        if (!document.getElementById('wallet-details-styles')) {
+            const style = document.createElement('style');
+            style.id = 'wallet-details-styles';
+            style.textContent = `
+                .wallet-details-content {
+                    padding: 16px 0;
+                }
+                .wallet-address-display,
+                .wallet-balance-display {
+                    background: rgba(255, 255, 255, 0.05);
+                    border-radius: 12px;
+                    padding: 16px;
+                    margin-bottom: 12px;
+                }
+                .wallet-label {
+                    display: block;
+                    color: rgba(255, 255, 255, 0.5);
+                    font-size: 12px;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                    margin-bottom: 8px;
+                }
+                .wallet-address-full {
+                    display: block;
+                    color: #fff;
+                    font-size: 14px;
+                    word-break: break-all;
+                    font-family: monospace;
+                    line-height: 1.5;
+                }
+                .wallet-balance-value {
+                    display: block;
+                    color: #14F195;
+                    font-size: 24px;
+                    font-weight: 700;
+                }
+                .wallet-actions {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 10px;
+                    margin-top: 20px;
+                }
+                .wallet-action-btn {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 10px;
+                    padding: 14px 20px;
+                    background: rgba(255, 255, 255, 0.08);
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    border-radius: 12px;
+                    color: #fff;
+                    font-size: 15px;
+                    font-weight: 500;
+                    cursor: pointer;
+                    transition: all 0.2s ease;
+                }
+                .wallet-action-btn:hover {
+                    background: rgba(255, 255, 255, 0.12);
+                    border-color: rgba(255, 255, 255, 0.2);
+                }
+                .wallet-action-btn:active {
+                    transform: scale(0.98);
+                }
+                .wallet-action-btn.disconnect-btn {
+                    background: rgba(255, 100, 100, 0.15);
+                    border-color: rgba(255, 100, 100, 0.3);
+                    color: #ff6b6b;
+                }
+                .wallet-action-btn.disconnect-btn:hover {
+                    background: rgba(255, 100, 100, 0.25);
+                }
+            `;
+            document.head.appendChild(style);
+        }
+        
+        // Add event listeners
+        const closeBtn = modal.querySelector('.wallet-modal-close-btn');
+        const overlay = modal.querySelector('.wallet-modal-overlay');
+        const copyBtn = modal.querySelector('.copy-address-btn');
+        const refreshBtn = modal.querySelector('.refresh-balance-btn');
+        const disconnectBtn = modal.querySelector('.disconnect-btn');
+        
+        const closeModal = () => modal.remove();
+        
+        closeBtn.addEventListener('click', closeModal);
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) closeModal();
+        });
+        
+        copyBtn.addEventListener('click', async () => {
+            try {
+                await navigator.clipboard.writeText(this.walletAddress);
+                this.showToast('Address copied!', 'success');
+            } catch (e) {
+                this.showToast('Failed to copy', 'error');
+            }
+        });
+        
+        refreshBtn.addEventListener('click', async () => {
+            this.showToast('Refreshing balance...', 'info');
+            await this.fetchBalance();
+            const balanceEl = modal.querySelector('.wallet-balance-value');
+            if (balanceEl) {
+                balanceEl.textContent = this.balance !== null ? this.balance.toFixed(4) + ' SOL' : 'Error';
+            }
+            this.showToast('Balance updated!', 'success');
+        });
+        
+        disconnectBtn.addEventListener('click', () => {
+            this.disconnectWallet();
+            closeModal();
+        });
+    }
+    
+    disconnectWallet() {
+        this.isWalletConnected = false;
+        this.walletAddress = null;
+        this.balance = null;
+        this.updateWalletUI();
+        this.updateBalanceDisplay();
+        this.showToast('Wallet disconnected', 'info');
     }
     
     // ==========================================================================
