@@ -398,24 +398,7 @@ class SolanaMobilePWA {
                         </button>
                         
                         <button class="wallet-option-btn mwa-option" data-wallet="mwa">
-                            <div class="wallet-option-icon mwa-icon">
-                                <svg viewBox="0 0 24 24" fill="none">
-                                    <!-- Mobile phone outline with Solana gradient -->
-                                    <rect x="5" y="2" width="14" height="20" rx="2" stroke="url(#mwaGrad)" stroke-width="1.5" fill="none"/>
-                                    <!-- Screen area -->
-                                    <rect x="7" y="5" width="10" height="12" rx="1" fill="url(#mwaGrad)" fill-opacity="0.2"/>
-                                    <!-- Solana logo simplified - three stacked bars -->
-                                    <path d="M8 8h8M8 11h8M8 14h8" stroke="url(#mwaGrad)" stroke-width="1.5" stroke-linecap="round"/>
-                                    <!-- Home button/notch -->
-                                    <circle cx="12" cy="19.5" r="1" fill="url(#mwaGrad)"/>
-                                    <defs>
-                                        <linearGradient id="mwaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                                            <stop offset="0%" style="stop-color:#9945FF"/>
-                                            <stop offset="100%" style="stop-color:#14F195"/>
-                                        </linearGradient>
-                                    </defs>
-                                </svg>
-                            </div>
+                            <img src="assets/wallets/mwa.svg" alt="Mobile Wallet Adapter" class="wallet-option-icon" onerror="this.style.display='none'" />
                             <div class="wallet-option-info">
                                 <span class="wallet-option-name">Mobile Wallet</span>
                                 <span class="wallet-option-desc">For Seeker & Android wallets</span>
@@ -533,16 +516,6 @@ class SolanaMobilePWA {
                 height: 48px;
                 border-radius: 12px;
                 object-fit: cover;
-            }
-            .wallet-option-icon.mwa-icon {
-                background: linear-gradient(135deg, rgba(153, 69, 255, 0.2), rgba(20, 241, 149, 0.2));
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            }
-            .wallet-option-icon.mwa-icon svg {
-                width: 32px;
-                height: 32px;
             }
             .wallet-option-info {
                 flex: 1;
