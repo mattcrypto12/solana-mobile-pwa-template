@@ -826,15 +826,18 @@ class SolanaMobilePWA {
             return;
         }
         
+        console.log('[Balance] Fetching for address:', this.walletAddress);
+        
         // Try multiple RPC endpoints in case one fails
         const rpcEndpoints = [
             'https://api.mainnet-beta.solana.com',
-            'https://solana-mainnet.g.alchemy.com/v2/demo',
             'https://rpc.ankr.com/solana'
         ];
         
         for (const rpcUrl of rpcEndpoints) {
             try {
+                console.log('[Balance] Trying RPC:', rpcUrl);
+                
                 const response = await fetch(rpcUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -846,23 +849,33 @@ class SolanaMobilePWA {
                     })
                 });
                 
-                if (!response.ok) continue;
+                console.log('[Balance] Response status:', response.status);
+                
+                if (!response.ok) {
+                    console.log('[Balance] Response not OK, trying next');
+                    continue;
+                }
                 
                 const data = await response.json();
+                console.log('[Balance] Response data:', JSON.stringify(data));
                 
                 if (data.result && typeof data.result.value === 'number') {
                     // Convert lamports to SOL (1 SOL = 1,000,000,000 lamports)
                     this.balance = data.result.value / 1e9;
+                    console.log('[Balance] Success! Balance:', this.balance, 'SOL');
                     this.updateBalanceDisplay();
                     return; // Success, exit
+                } else if (data.error) {
+                    console.log('[Balance] RPC error:', data.error);
                 }
             } catch (error) {
-                // Try next endpoint
+                console.log('[Balance] Fetch error:', error.message);
                 continue;
             }
         }
         
         // All endpoints failed
+        console.log('[Balance] All endpoints failed');
         this.balance = 0;
         this.updateBalanceDisplay();
     }
