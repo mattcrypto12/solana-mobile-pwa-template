@@ -826,35 +826,44 @@ class SolanaMobilePWA {
             return;
         }
         
-        try {
-            // Solana RPC endpoint - using mainnet for real balances
-            const rpcUrl = 'https://api.mainnet-beta.solana.com';
-            
-            // JSON-RPC request to get account balance
-            const response = await fetch(rpcUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    jsonrpc: '2.0',
-                    id: 1,
-                    method: 'getBalance',
-                    params: [this.walletAddress]
-                })
-            });
-            
-            const data = await response.json();
-            
-            if (data.result && typeof data.result.value === 'number') {
-                // Convert lamports to SOL (1 SOL = 1,000,000,000 lamports)
-                this.balance = data.result.value / 1e9;
-            } else {
-                this.balance = 0;
+        // Try multiple RPC endpoints in case one fails
+        const rpcEndpoints = [
+            'https://api.mainnet-beta.solana.com',
+            'https://solana-mainnet.g.alchemy.com/v2/demo',
+            'https://rpc.ankr.com/solana'
+        ];
+        
+        for (const rpcUrl of rpcEndpoints) {
+            try {
+                const response = await fetch(rpcUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0',
+                        id: 1,
+                        method: 'getBalance',
+                        params: [this.walletAddress]
+                    })
+                });
+                
+                if (!response.ok) continue;
+                
+                const data = await response.json();
+                
+                if (data.result && typeof data.result.value === 'number') {
+                    // Convert lamports to SOL (1 SOL = 1,000,000,000 lamports)
+                    this.balance = data.result.value / 1e9;
+                    this.updateBalanceDisplay();
+                    return; // Success, exit
+                }
+            } catch (error) {
+                // Try next endpoint
+                continue;
             }
-        } catch (error) {
-            // On network error, show 0 balance rather than breaking UI
-            this.balance = 0;
         }
         
+        // All endpoints failed
+        this.balance = 0;
         this.updateBalanceDisplay();
     }
     
