@@ -129,9 +129,9 @@ class SolanaMobilePWA {
         this.closeDrawer.addEventListener('click', () => this.closeDrawerMenu());
         this.drawerOverlay.addEventListener('click', () => this.closeDrawerMenu());
         
-        // Wallet
+        // Wallet - use handleWalletClick for both buttons so it shows details when connected
         this.walletBtn.addEventListener('click', () => this.handleWalletClick());
-        this.connectWalletBtn.addEventListener('click', () => this.connectWallet());
+        this.connectWalletBtn.addEventListener('click', () => this.handleWalletClick());
         
         // Quick actions
         document.querySelectorAll('.action-card').forEach(card => {
@@ -826,57 +826,52 @@ class SolanaMobilePWA {
             return;
         }
         
-        console.log('[Balance] Fetching for address:', this.walletAddress);
-        
-        // Try multiple RPC endpoints in case one fails
+        // Use public RPC endpoints that support CORS
+        // Helius and other providers have better CORS support for browsers
         const rpcEndpoints = [
-            'https://api.mainnet-beta.solana.com',
-            'https://rpc.ankr.com/solana'
+            'https://mainnet.helius-rpc.com/?api-key=1d8740dc-e5f4-421c-b823-e1bad1889eff',
+            'https://solana-mainnet.g.alchemy.com/v2/alch-demo',
+            'https://api.mainnet-beta.solana.com'
         ];
         
         for (const rpcUrl of rpcEndpoints) {
             try {
-                console.log('[Balance] Trying RPC:', rpcUrl);
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000);
                 
                 const response = await fetch(rpcUrl, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json'
+                    },
                     body: JSON.stringify({
                         jsonrpc: '2.0',
                         id: 1,
                         method: 'getBalance',
                         params: [this.walletAddress]
-                    })
+                    }),
+                    signal: controller.signal
                 });
                 
-                console.log('[Balance] Response status:', response.status);
+                clearTimeout(timeoutId);
                 
-                if (!response.ok) {
-                    console.log('[Balance] Response not OK, trying next');
-                    continue;
-                }
+                if (!response.ok) continue;
                 
                 const data = await response.json();
-                console.log('[Balance] Response data:', JSON.stringify(data));
                 
                 if (data.result && typeof data.result.value === 'number') {
                     // Convert lamports to SOL (1 SOL = 1,000,000,000 lamports)
                     this.balance = data.result.value / 1e9;
-                    console.log('[Balance] Success! Balance:', this.balance, 'SOL');
                     this.updateBalanceDisplay();
-                    return; // Success, exit
-                } else if (data.error) {
-                    console.log('[Balance] RPC error:', data.error);
+                    return; // Success
                 }
             } catch (error) {
-                console.log('[Balance] Fetch error:', error.message);
-                continue;
+                continue; // Try next endpoint
             }
         }
         
-        // All endpoints failed
-        console.log('[Balance] All endpoints failed');
-        this.balance = 0;
+        // All endpoints failed - show null instead of 0 so user knows it failed
+        this.balance = null;
         this.updateBalanceDisplay();
     }
     
