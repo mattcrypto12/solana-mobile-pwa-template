@@ -154,7 +154,6 @@ class SolanaWalletAdapter {
                     this.emit('connect', { publicKey: this.publicKey });
                 }
             } catch (error) {
-                console.log('No existing connection found');
                 localStorage.removeItem('solana_wallet_connected');
             }
         }
@@ -188,7 +187,6 @@ class SolanaWalletAdapter {
             // No wallet found
             throw new Error('No Solana wallet found. Please install a wallet like Phantom or Solflare.');
         } catch (error) {
-            console.error('Wallet connection error:', error);
             throw error;
         }
     }
@@ -385,7 +383,7 @@ class SolanaWalletAdapter {
             try {
                 await this.provider.disconnect();
             } catch (error) {
-                console.warn('Disconnect error:', error);
+                // Disconnect can sometimes throw, but we proceed anyway
             }
         }
         
@@ -455,7 +453,6 @@ class SolanaWalletAdapter {
             // Convert lamports to SOL
             return data.result.value / 1e9;
         } catch (error) {
-            console.error('Failed to fetch balance:', error);
             throw error;
         }
     }

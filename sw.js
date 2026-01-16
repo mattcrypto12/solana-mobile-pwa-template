@@ -3,7 +3,7 @@
  * Provides offline support and caching for the PWA
  */
 
-const CACHE_NAME = 'solana-pwa-v15';
+const CACHE_NAME = 'solana-pwa-v18';
 const OFFLINE_URL = '/offline.html';
 
 // Files to cache immediately on install
@@ -42,12 +42,9 @@ const CACHE_FIRST_PATTERNS = [
 // ==========================================================================
 
 self.addEventListener('install', (event) => {
-    console.log('[SW] Installing service worker...');
-    
     event.waitUntil(
         caches.open(CACHE_NAME)
             .then((cache) => {
-                console.log('[SW] Precaching assets...');
                 return cache.addAll(PRECACHE_ASSETS);
             })
             .then(() => {
@@ -62,8 +59,6 @@ self.addEventListener('install', (event) => {
 // ==========================================================================
 
 self.addEventListener('activate', (event) => {
-    console.log('[SW] Activating service worker...');
-    
     event.waitUntil(
         Promise.all([
             // Clean up old caches
@@ -71,10 +66,7 @@ self.addEventListener('activate', (event) => {
                 return Promise.all(
                     cacheNames
                         .filter((name) => name !== CACHE_NAME)
-                        .map((name) => {
-                            console.log('[SW] Deleting old cache:', name);
-                            return caches.delete(name);
-                        })
+                        .map((name) => caches.delete(name))
                 );
             }),
             // Take control of all clients immediately
@@ -148,7 +140,6 @@ async function cacheFirst(request) {
         
         return networkResponse;
     } catch (error) {
-        console.error('[SW] Cache-first fetch failed:', error);
         return new Response('Offline', { status: 503 });
     }
 }
@@ -168,8 +159,6 @@ async function networkFirst(request) {
         
         return networkResponse;
     } catch (error) {
-        console.log('[SW] Network failed, serving from cache:', request.url);
-        
         const cachedResponse = await caches.match(request);
         
         if (cachedResponse) {
@@ -193,7 +182,6 @@ async function networkOnly(request) {
     try {
         return await fetch(request);
     } catch (error) {
-        console.error('[SW] Network-only request failed:', error);
         return new Response(JSON.stringify({ error: 'Network unavailable' }), {
             status: 503,
             headers: { 'Content-Type': 'application/json' }
@@ -288,8 +276,6 @@ self.addEventListener('notificationclick', (event) => {
 // ==========================================================================
 
 self.addEventListener('sync', (event) => {
-    console.log('[SW] Background sync:', event.tag);
-    
     if (event.tag === 'sync-transactions') {
         event.waitUntil(syncTransactions());
     }
@@ -298,7 +284,6 @@ self.addEventListener('sync', (event) => {
 async function syncTransactions() {
     // Sync pending transactions when back online
     // This would be implemented based on your specific needs
-    console.log('[SW] Syncing transactions...');
 }
 
 // ==========================================================================

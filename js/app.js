@@ -1,31 +1,52 @@
 /**
  * Solana Mobile PWA - Main Application
- * A mobile-optimized Progressive Web App template for Solana dApp Store
+ * 
+ * A mobile-optimized Progressive Web App template for Solana dApp Store.
+ * This template demonstrates best practices for building PWAs that work
+ * seamlessly with Solana mobile wallets via Mobile Wallet Adapter (MWA).
+ * 
+ * Features:
+ * - Mobile Wallet Adapter (MWA) integration for native wallet connections
+ * - Injected provider support for in-app wallet browsers
+ * - Swipe gestures for navigation
+ * - Haptic feedback for touch interactions
+ * - Dark/light theme support
+ * - Offline-capable via service worker
+ * 
+ * @see https://docs.solanamobile.com for MWA documentation
  */
 
 // ==========================================================================
 // App Initialization
 // ==========================================================================
 
+/**
+ * Main application class handling all UI interactions and wallet connections.
+ */
 class SolanaMobilePWA {
     constructor() {
+        // Navigation state
         this.currentPage = 'home';
+        
+        // Wallet connection state
         this.isWalletConnected = false;
-        this.walletAddress = null;
-        this.balance = null;
+        this.walletAddress = null;  // Base58-encoded public key
+        this.balance = null;        // Balance in SOL (not lamports)
         
         // Touch handling for swipe gestures
         this.touchStartX = 0;
         this.touchEndX = 0;
         
-        // Haptic feedback support
+        // Haptic feedback support (vibration API)
         this.hapticEnabled = true;
         
         this.init();
     }
     
+    /**
+     * Initializes the app, waiting for DOM if necessary.
+     */
     async init() {
-        // Wait for DOM to be ready
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', () => this.setup());
         } else {
@@ -33,24 +54,30 @@ class SolanaMobilePWA {
         }
     }
     
+    /**
+     * Main setup function called after DOM is ready.
+     * Caches DOM elements, binds events, and initializes features.
+     */
     setup() {
         this.cacheElements();
         this.bindEvents();
         this.initializeSettings();
         this.registerServiceWorker();
-        this.checkForWalletProvider(); // Check if we're in a wallet browser
+        this.checkForWalletProvider();
         this.hideSplashScreen();
     }
     
-    // Check if we're in a wallet's in-app browser and auto-connect
+    /**
+     * Checks if we're running inside a wallet's in-app browser (e.g., Phantom app).
+     * If so, shows a prompt to connect since the wallet is already available.
+     */
     async checkForWalletProvider() {
-        // Wait a bit for providers to inject
+        // Wait for wallet providers to inject their APIs
         await new Promise(resolve => setTimeout(resolve, 500));
         
         if (typeof getInjectedProvider === 'function') {
             const injected = getInjectedProvider();
             if (injected) {
-                console.log('Found injected provider:', injected.name);
                 // We're in a wallet browser! Show a connect prompt
                 this.showToast(`${injected.name} detected! Tap Connect Wallet to continue.`, 'info');
             }
@@ -260,7 +287,6 @@ class SolanaMobilePWA {
                 this.showMobileWalletPrompt();
             }
         } catch (error) {
-            console.error('Wallet connection error:', error);
             this.showToast('Failed to connect wallet', 'error');
         }
     }
@@ -626,11 +652,23 @@ class SolanaMobilePWA {
         }
     }
     
+    /**
+     * Connects to a wallet using the Mobile Wallet Adapter (MWA) protocol.
+     * 
+     * This is the primary connection method for Android/Seeker devices. It:
+     * 1. First checks for injected providers (in-app browser scenario)
+     * 2. Falls back to MWA protocol which launches the system wallet chooser
+     * 3. Handles the encrypted authorization flow via WebSocket
+     * 4. Converts the base64 address response to base58 format
+     * 
+     * MWA is preferred over deep links because it:
+     * - Works with any installed wallet (Phantom, Solflare, Seed Vault, etc.)
+     * - Provides a native wallet chooser experience
+     * - Uses encrypted communication for security
+     */
     async connectWithMWA() {
-        // Connect using Mobile Wallet Adapter (for Seeker phones and Android wallets)
-        // This uses the proper MWA protocol per Solana Mobile guidelines
-        
         // First check if we're already in a wallet's in-app browser
+        // This happens when user opens our PWA from within a wallet app
         if (typeof getInjectedProvider === 'function') {
             const injected = getInjectedProvider();
             if (injected) {
@@ -644,7 +682,6 @@ class SolanaMobilePWA {
                     this.showToast(`✓ Connected via ${injected.name}!`, 'success');
                     return;
                 } catch (e) {
-                    console.error('Injected provider error:', e);
                     if (e.code === 4001) {
                         this.showToast('Connection rejected by user', 'warning');
                         return;
@@ -653,44 +690,44 @@ class SolanaMobilePWA {
             }
         }
         
-        // Use the full MWA transact function which:
-        // 1. Generates association keypair
-        // 2. Builds intent URL with proper parameters
-        // 3. Launches wallet chooser (shows Seed Vault, Phantom, Solflare, etc.)
-        // 4. Establishes encrypted WebSocket session
+        // If no injected provider, use the full MWA protocol
+        // This launches the Android wallet chooser (Seed Vault, Phantom, Solflare, etc.)
         this.showToast('Opening wallet selector...', 'info');
         
         try {
             if (typeof transact === 'function') {
-                console.log('[App] Using MWA transact function');
-                
+                // transact() handles the complete MWA flow:
+                // 1. Generates association keypair for app identity
+                // 2. Opens solana-wallet:// URL to launch wallet chooser
+                // 3. Establishes encrypted WebSocket session
+                // 4. Calls our callback with the wallet API
                 const result = await transact(async (wallet) => {
-                    // Request authorization
+                    // Request authorization from the wallet
+                    // The wallet will show a consent screen to the user
                     const auth = await wallet.authorize({
                         identity: {
                             name: 'Solana Mobile PWA',
                             uri: window.location.origin,
-                            icon: '/assets/icons/icon-192x192.png'  // Relative path from uri
+                            icon: '/assets/icons/icon-192x192.png'
                         },
-                        chain: 'solana:devnet'  // MWA 2.0 uses 'chain' not 'cluster'
+                        chain: 'solana:mainnet'  // Using mainnet for real balances
                     });
                     
                     return auth;
                 });
                 
-                console.log('[App] MWA result:', JSON.stringify(result, null, 2));
-                
+                // Process the authorization result
                 if (result && result.accounts && result.accounts.length > 0) {
                     const account = result.accounts[0];
-                    console.log('[App] Account data:', JSON.stringify(account, null, 2));
                     
-                    // MWA returns base64-encoded address, need to convert to base58
-                    // Use display_address if available, otherwise convert from base64
+                    // MWA returns addresses as base64-encoded bytes
+                    // We need to convert to base58 for display
                     let address;
                     if (account.display_address) {
+                        // Some wallets provide pre-formatted address
                         address = account.display_address;
                     } else if (account.address) {
-                        // Convert base64 to base58
+                        // Convert base64-encoded public key to base58
                         address = this.base64ToBase58(account.address);
                     }
                     
@@ -701,20 +738,17 @@ class SolanaMobilePWA {
                         this.fetchBalance();
                         this.showToast('✓ Wallet connected via MWA!', 'success');
                     } else {
-                        console.error('[App] No valid address in MWA response');
                         this.showToast('Failed to get wallet address', 'error');
                     }
                 } else {
-                    console.log('[App] No accounts in MWA result');
                     this.showToast('No accounts returned from wallet', 'warning');
                 }
             } else {
-                console.error('[App] transact function not available');
                 this.showToast('MWA not available. Try a specific wallet.', 'error');
             }
             
         } catch (error) {
-            console.error('MWA connection error:', error);
+            // Handle specific MWA errors with user-friendly messages
             if (error.message?.includes('WALLET_NOT_FOUND')) {
                 this.showToast('No MWA-compatible wallet found.', 'error');
             } else if (error.message?.includes('SESSION_TIMEOUT')) {
@@ -758,14 +792,33 @@ class SolanaMobilePWA {
         this.updateBalanceDisplay();
     }
     
+    /**
+     * Updates the balance display in the UI.
+     * Formats the balance with exactly 4 decimal places.
+     */
     updateBalanceDisplay() {
         if (this.balance !== null) {
-            this.balanceValue.textContent = `${this.balance.toFixed(4)} SOL`;
+            // Format balance with 4 decimal places, ensuring leading zero is preserved
+            const formattedBalance = this.balance.toLocaleString('en-US', {
+                minimumFractionDigits: 4,
+                maximumFractionDigits: 4,
+                useGrouping: false
+            });
+            this.balanceValue.textContent = `${formattedBalance} SOL`;
         } else {
             this.balanceValue.textContent = '-- SOL';
         }
     }
     
+    /**
+     * Fetches the SOL balance for the connected wallet from Solana RPC.
+     * 
+     * Uses the Solana JSON-RPC API to query the account balance.
+     * The RPC returns balance in lamports (1 SOL = 1,000,000,000 lamports).
+     * 
+     * Note: Currently uses devnet. For production, change to mainnet-beta:
+     * https://api.mainnet-beta.solana.com
+     */
     async fetchBalance() {
         if (!this.walletAddress) {
             this.balance = null;
@@ -774,8 +827,10 @@ class SolanaMobilePWA {
         }
         
         try {
-            // Use devnet RPC to fetch real balance
-            const rpcUrl = 'https://api.devnet.solana.com';
+            // Solana RPC endpoint - using mainnet for real balances
+            const rpcUrl = 'https://api.mainnet-beta.solana.com';
+            
+            // JSON-RPC request to get account balance
             const response = await fetch(rpcUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -790,69 +845,90 @@ class SolanaMobilePWA {
             const data = await response.json();
             
             if (data.result && typeof data.result.value === 'number') {
-                // Convert lamports to SOL (1 SOL = 1e9 lamports)
+                // Convert lamports to SOL (1 SOL = 1,000,000,000 lamports)
                 this.balance = data.result.value / 1e9;
-                console.log('[App] Fetched balance:', this.balance, 'SOL');
             } else {
-                console.warn('[App] Unexpected balance response:', data);
                 this.balance = 0;
             }
         } catch (error) {
-            console.error('[App] Failed to fetch balance:', error);
+            // On network error, show 0 balance rather than breaking UI
             this.balance = 0;
         }
         
         this.updateBalanceDisplay();
     }
     
+    /**
+     * Truncates a wallet address for display (e.g., "ABCD...WXYZ")
+     * @param {string} address - Full wallet address
+     * @returns {string} Truncated address showing first and last 4 characters
+     */
     truncateAddress(address) {
         if (!address) return '';
         return `${address.slice(0, 4)}...${address.slice(-4)}`;
     }
     
-    // Convert base64-encoded address to base58 (Solana address format)
+    /**
+     * Converts a base64-encoded wallet address to base58 format.
+     * 
+     * MWA returns wallet addresses as base64-encoded 32-byte public keys.
+     * Solana uses base58 encoding (like Bitcoin) for display.
+     * 
+     * Algorithm:
+     * 1. Decode base64 to raw bytes (32 bytes for Ed25519 public key)
+     * 2. Treat bytes as a big integer
+     * 3. Repeatedly divide by 58, collecting remainders
+     * 4. Map remainders to base58 alphabet
+     * 5. Handle leading zero bytes (they become '1' in base58)
+     * 
+     * @param {string} base64 - Base64-encoded address from MWA
+     * @returns {string} Base58-encoded Solana address
+     */
     base64ToBase58(base64) {
         try {
-            // Decode base64 to bytes
+            // Step 1: Decode base64 to raw bytes
             const binaryString = atob(base64);
             const bytes = new Uint8Array(binaryString.length);
             for (let i = 0; i < binaryString.length; i++) {
                 bytes[i] = binaryString.charCodeAt(i);
             }
             
-            // Base58 alphabet (Bitcoin/Solana style)
+            // Base58 alphabet - note: no 0, O, I, l to avoid confusion
             const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
             
-            // Convert bytes to base58
+            // Step 2-4: Convert bytes to base58 using repeated division
+            // We process byte-by-byte, treating the running result as a big integer
             const digits = [0];
             for (let i = 0; i < bytes.length; i++) {
                 let carry = bytes[i];
+                // Multiply existing result by 256 and add new byte
                 for (let j = 0; j < digits.length; j++) {
-                    carry += digits[j] << 8;
+                    carry += digits[j] << 8; // digits[j] * 256
                     digits[j] = carry % 58;
                     carry = (carry / 58) | 0;
                 }
+                // Handle overflow into new digits
                 while (carry > 0) {
                     digits.push(carry % 58);
                     carry = (carry / 58) | 0;
                 }
             }
             
-            // Handle leading zeros
+            // Step 5: Handle leading zeros (each 0x00 byte = '1' in base58)
             let result = '';
             for (let i = 0; i < bytes.length && bytes[i] === 0; i++) {
-                result += ALPHABET[0];
+                result += ALPHABET[0]; // '1'
             }
             
-            // Convert digits to string (reverse order)
+            // Convert digit indices to characters (reverse order, as we built LSB first)
             for (let i = digits.length - 1; i >= 0; i--) {
                 result += ALPHABET[digits[i]];
             }
             
             return result;
         } catch (e) {
-            console.error('[App] Failed to convert base64 to base58:', e);
-            return base64; // Return original if conversion fails
+            // If conversion fails, return original (may already be base58)
+            return base64;
         }
     }
 
@@ -883,7 +959,7 @@ class SolanaMobilePWA {
                         
                         <div class="wallet-balance-display">
                             <span class="wallet-label">Balance</span>
-                            <span class="wallet-balance-value">${this.balance !== null ? this.balance.toFixed(4) + ' SOL' : 'Loading...'}</span>
+                            <span class="wallet-balance-value">${this.balance !== null ? this.balance.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4, useGrouping: false }) + ' SOL' : 'Loading...'}</span>
                         </div>
                         
                         <div class="wallet-actions">
@@ -1219,7 +1295,6 @@ class SolanaMobilePWA {
         if ('serviceWorker' in navigator) {
             try {
                 const registration = await navigator.serviceWorker.register('/sw.js');
-                console.log('Service Worker registered:', registration.scope);
                 
                 // Handle updates
                 registration.addEventListener('updatefound', () => {
@@ -1231,7 +1306,7 @@ class SolanaMobilePWA {
                     });
                 });
             } catch (error) {
-                console.error('Service Worker registration failed:', error);
+                // Service worker registration failed silently
             }
         }
     }
