@@ -670,9 +670,9 @@ class SolanaMobilePWA {
                         identity: {
                             name: 'Solana Mobile PWA',
                             uri: window.location.origin,
-                            icon: `${window.location.origin}/assets/icons/icon-192x192.png`
+                            icon: '/assets/icons/icon-192x192.png'  // Relative path from uri
                         },
-                        cluster: 'devnet'
+                        chain: 'solana:devnet'  // MWA 2.0 uses 'chain' not 'cluster'
                     });
                     
                     return auth;
